@@ -1,18 +1,31 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Activity, ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Crosshair, Download, Gauge,
-  Loader2, Pause, Play, RotateCcw, SkipBack, SkipForward, SlidersHorizontal, Target, TrendingDown,
-  TrendingUp, Upload, X,
+  Activity, AreaChart, ArrowDown, ArrowUp, BarChart3, Camera, CandlestickChart, Check, ChevronDown,
+  ChevronLeft, ChevronRight, Crosshair, Download, Eraser, Gauge, Layers, LineChart, Loader2, Magnet,
+  Maximize2, Minimize2, Minus, MousePointer2, Pause, Pencil, Play, RotateCcw, Ruler, Search, Settings2,
+  SkipBack, SkipForward, SlidersHorizontal, Square, Star, Target, Trash2, TrendingDown, TrendingUp, Upload, X,
 } from 'lucide-react';
-import { BacktestChart, type ChartOverlays, type OpenPosition } from './BacktestChart';
 import {
-  MARKETS, TIMEFRAMES, atrAt, atrSeries, closeTrade, computeStats, emaSeries, fetchCandles, fmtMoney,
-  fmtPrice, fmtSigned, fmtSignedMoney, getMarket, makeSampleCandles, parseCsv,
-  priceDigits, rsiSeries, settleTrades,
-  type BacktestTrade, type Candle, type Side, type TimeframeId,
+  BacktestChart,
+  type ChartOverlays,
+  type ChartSettings,
+  type ChartType,
+  type Drawing,
+  type DrawingTool,
+  type IndicatorPeriods,
+  type OpenPosition,
+} from './BacktestChart';
+import {
+  MARKETS, TIMEFRAMES, advanceSession, atrAt, atrSeries, closeTrade, computeStats, emaSeries, fetchCandles,
+  fetchTickers, fmtCompact, fmtMoney, fmtPrice, fmtSigned, fmtSignedMoney, getMarket, macdSeries, makeSampleCandles,
+  parseCsv, partialClose, priceDigits, rsiSeries, stochRsiSeries, vwapSeries,
+  type BacktestTrade, type Candle, type PendingOrder, type Side, type Ticker, type TimeframeId,
 } from './engine';
 
-const PREFS_KEY = 'trader-vault-backtest-v1';
+const PREFS_KEY = 'trader-vault-backtest-v2';
+
+type DockTab = 'executions' | 'statistics' | 'distribution';
+type OrderKind = 'market' | 'limit';
 
 type Prefs = {
   marketId?: string;
@@ -23,6 +36,12 @@ type Prefs = {
   rewardR?: number;
   speed?: number;
   overlays?: ChartOverlays;
+  periods?: IndicatorPeriods;
+  settings?: ChartSettings;
+  chartType?: ChartType;
+  magnet?: boolean;
+  dock?: DockTab;
+  watchlist?: string[];
 };
 
 function loadPrefs(): Prefs {
@@ -34,7 +53,110 @@ function loadPrefs(): Prefs {
   }
 }
 
-const DEFAULT_OVERLAYS: ChartOverlays = { ema9: true, ema21: true, ema50: false, bollinger: false, volume: true, rsi: false };
+const DEFAULT_OVERLAYS: ChartOverlays = {
+  ema1: true,
+  ema2: true,
+  ema3: false,
+  ema4: false,
+  vwap: false,
+  bollinger: false,
+  volume: true,
+  rsi: false,
+  macd: false,
+  stoch: false,
+};
+
+const DEFAULT_PERIODS: IndicatorPeriods = {
+  ema1: 9,
+  ema2: 21,
+  ema3: 50,
+  ema4: 200,
+  bbLength: 20,
+  bbMult: 2,
+  rsiLength: 14,
+  macdFast: 12,
+  macdSlow: 26,
+  macdSignal: 9,
+  stochLength: 14,
+  stochK: 3,
+  stochD: 3,
+  atrLength: 14,
+};
+
+const DEFAULT_SETTINGS: ChartSettings = { grid: true, logScale: false, lastPriceLine: true };
+
+const DEFAULT_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XAUUSD', 'EURUSD'];
+
+const OVERLAY_META: { key: keyof ChartOverlays; label: string; color: string; hint: string }[] = [
+  { key: 'ema1', label: 'EMA · fast', color: '#38bdf8', hint: 'EMA 1' },
+  { key: 'ema2', label: 'EMA · slow', color: '#f59e0b', hint: 'EMA 2' },
+  { key: 'ema3', label: 'EMA · trend', color: '#a78bfa', hint: 'EMA 3' },
+  { key: 'ema4', label: 'EMA · long', color: '#f472b6', hint: 'EMA 4' },
+  { key: 'vwap', label: 'VWAP (session)', color: '#22d3ee', hint: 'VWAP' },
+  { key: 'bollinger', label: 'Bollinger Bands', color: '#94a3b8', hint: 'BB' },
+  { key: 'volume', label: 'Volume', color: '#64748b', hint: 'Volume' },
+  { key: 'rsi', label: 'RSI pane', color: '#c084fc', hint: 'RSI' },
+  { key: 'macd', label: 'MACD pane', color: '#38bdf8', hint: 'MACD' },
+  { key: 'stoch', label: 'Stochastic RSI pane', color: '#f59e0b', hint: 'Stoch RSI' },
+];
+
+const PERIOD_FIELDS: { group: string; fields: { key: keyof IndicatorPeriods; label: string; min: number; max: number; step: number }[] }[] = [
+  {
+    group: 'Moving averages',
+    fields: [
+      { key: 'ema1', label: 'EMA 1', min: 2, max: 400, step: 1 },
+      { key: 'ema2', label: 'EMA 2', min: 2, max: 400, step: 1 },
+      { key: 'ema3', label: 'EMA 3', min: 2, max: 400, step: 1 },
+      { key: 'ema4', label: 'EMA 4', min: 2, max: 400, step: 1 },
+    ],
+  },
+  {
+    group: 'Bollinger Bands',
+    fields: [
+      { key: 'bbLength', label: 'Length', min: 5, max: 200, step: 1 },
+      { key: 'bbMult', label: 'Std dev', min: 0.5, max: 5, step: 0.1 },
+    ],
+  },
+  { group: 'RSI', fields: [{ key: 'rsiLength', label: 'Length', min: 2, max: 100, step: 1 }] },
+  {
+    group: 'MACD',
+    fields: [
+      { key: 'macdFast', label: 'Fast', min: 2, max: 100, step: 1 },
+      { key: 'macdSlow', label: 'Slow', min: 3, max: 200, step: 1 },
+      { key: 'macdSignal', label: 'Signal', min: 2, max: 100, step: 1 },
+    ],
+  },
+  {
+    group: 'Stochastic RSI',
+    fields: [
+      { key: 'stochLength', label: 'Length', min: 3, max: 100, step: 1 },
+      { key: 'stochK', label: '%K', min: 1, max: 20, step: 1 },
+      { key: 'stochD', label: '%D', min: 1, max: 20, step: 1 },
+    ],
+  },
+  { group: 'Risk', fields: [{ key: 'atrLength', label: 'ATR length', min: 2, max: 100, step: 1 }] },
+];
+
+const CHART_TYPES: { id: ChartType; label: string; icon: React.ElementType }[] = [
+  { id: 'candles', label: 'Candles', icon: CandlestickChart },
+  { id: 'hollow', label: 'Hollow candles', icon: CandlestickChart },
+  { id: 'heikin', label: 'Heikin Ashi', icon: CandlestickChart },
+  { id: 'bars', label: 'Bars', icon: BarChart3 },
+  { id: 'line', label: 'Line', icon: LineChart },
+  { id: 'area', label: 'Area', icon: AreaChart },
+];
+
+const DRAW_TOOLS: { id: DrawingTool; label: string; icon: React.ElementType; hint: string }[] = [
+  { id: 'cursor', label: 'Cursor', icon: MousePointer2, hint: 'Cursor — drag/zoom the chart' },
+  { id: 'crosshair', label: 'Crosshair', icon: Crosshair, hint: 'Crosshair' },
+  { id: 'trend', label: 'Trend line', icon: Pencil, hint: 'Trend line — drag from A to B' },
+  { id: 'hline', label: 'Horizontal line', icon: Minus, hint: 'Horizontal price line' },
+  { id: 'ray', label: 'Ray', icon: TrendingUp, hint: 'Ray — extends to the right' },
+  { id: 'rect', label: 'Rectangle', icon: Square, hint: 'Rectangle / zone' },
+  { id: 'fib', label: 'Fib retracement', icon: Ruler, hint: 'Fibonacci retracement' },
+  { id: 'measure', label: 'Measure', icon: Layers, hint: 'Measure price & time' },
+  { id: 'eraser', label: 'Eraser', icon: Eraser, hint: 'Eraser — click a drawing to remove it' },
+];
 
 const fmtQty = (value: number) => {
   if (!Number.isFinite(value)) return '—';
@@ -45,6 +167,8 @@ const fmtQty = (value: number) => {
 };
 
 const pct = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+const shortName = (label: string) => label.split(' / ')[0];
+const quoteName = (label: string) => label.split(' / ')[1] ?? 'USD';
 
 /* ------------------------------------------------------------------ */
 /*  Small presentational helpers                                       */
@@ -64,8 +188,8 @@ const StatCard: React.FC<{ label: string; value: string; hint: string; tone?: 'u
 );
 
 const EquityCurve: React.FC<{ points: { x: number; value: number }[]; start: number }> = ({ points, start }) => {
-  const width = 340;
-  const height = 104;
+  const width = 420;
+  const height = 108;
   const pad = 6;
   const values = points.map((point) => point.value);
   const min = Math.min(...values, start);
@@ -78,24 +202,39 @@ const EquityCurve: React.FC<{ points: { x: number; value: number }[]; start: num
   const area = `${line} L${coords[coords.length - 1].x.toFixed(1)},${height - pad} L${coords[0].x.toFixed(1)},${height - pad} Z`;
   const last = points[points.length - 1]?.value ?? start;
   const up = last >= start;
-  const stroke = up ? '#059669' : '#e11d48';
+  const stroke = up ? '#34d399' : '#fb7185';
   const gradientId = up ? 'bt-equity-up' : 'bt-equity-down';
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-24 w-full" role="img" aria-label="Equity curve">
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-[104px] w-full" role="img" aria-label="Equity curve">
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={stroke} stopOpacity="0.22" />
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.3" />
           <stop offset="100%" stopColor={stroke} stopOpacity="0" />
         </linearGradient>
       </defs>
       <line x1={pad} x2={width - pad} y1={toY(start)} y2={toY(start)} stroke="rgba(148,163,184,.35)" strokeDasharray="3 4" strokeWidth="1" />
       <path d={area} fill={`url(#${gradientId})`} />
-      <path d={line} fill="none" stroke={stroke} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      <circle cx={coords[coords.length - 1].x} cy={coords[coords.length - 1].y} r="3" fill={stroke} />
+      <path d={line} fill="none" stroke={stroke} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <circle cx={coords[coords.length - 1].x} cy={coords[coords.length - 1].y} r="2.6" fill={stroke} />
     </svg>
   );
 };
+
+const Modal: React.FC<{ title: string; subtitle?: string; onClose: () => void; width?: string; children: React.ReactNode }> = ({ title, subtitle, onClose, width = 'max-w-2xl', children }) => (
+  <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-zinc-950/45 p-4 backdrop-blur-[3px] sm:items-center" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className={`bt-modal w-full ${width} overflow-hidden rounded-3xl border border-white/10 bg-white shadow-[0_30px_90px_rgba(15,23,42,.35)]`}>
+      <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-[11px] text-slate-400">{subtitle}</p>}
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={16} /></button>
+      </div>
+      <div className="max-h-[72vh] overflow-y-auto px-5 py-4">{children}</div>
+    </div>
+  </div>
+);
 
 /* ------------------------------------------------------------------ */
 /*  Screen                                                             */
@@ -109,22 +248,39 @@ export const BacktestView: React.FC = () => {
   const [marketId, setMarketId] = useState(initialMarket.id);
   const [timeframe, setTimeframe] = useState<TimeframeId>(initialTimeframe);
   const [candles, setCandles] = useState<Candle[]>(() => makeSampleCandles(initialMarket, initialTimeframe));
-  const [cursor, setCursor] = useState(() => Math.floor(900 * 0.35));
+  const [cursor, setCursor] = useState(() => Math.floor(1000 * 0.35));
   const cursorRef = useRef(cursor);
-  const [trades, setTrades] = useState<BacktestTrade[]>([]);
+  const [session, setSession] = useState<{ trades: BacktestTrade[]; orders: PendingOrder[] }>({ trades: [], orders: [] });
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(prefs.speed ?? 2);
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState('Practice candles');
   const [notice, setNotice] = useState('');
+  const [feedback, setFeedback] = useState('');
 
   const [balance, setBalance] = useState(prefs.balance ?? 10_000);
   const [riskPct, setRiskPct] = useState(prefs.riskPct ?? 1);
   const [stopMult, setStopMult] = useState(prefs.stopMult ?? 1.5);
   const [rewardR, setRewardR] = useState(prefs.rewardR ?? 2);
+  const [orderKind, setOrderKind] = useState<OrderKind>('market');
+  const [limitPrice, setLimitPrice] = useState('');
+
   const [overlays, setOverlays] = useState<ChartOverlays>({ ...DEFAULT_OVERLAYS, ...(prefs.overlays ?? {}) });
-  const [indicatorsOpen, setIndicatorsOpen] = useState(false);
-  const [feedback, setFeedback] = useState('');
+  const [periods, setPeriods] = useState<IndicatorPeriods>({ ...DEFAULT_PERIODS, ...(prefs.periods ?? {}) });
+  const [settings, setSettings] = useState<ChartSettings>({ ...DEFAULT_SETTINGS, ...(prefs.settings ?? {}) });
+  const [chartType, setChartType] = useState<ChartType>(prefs.chartType ?? 'candles');
+  const [magnet, setMagnet] = useState(prefs.magnet ?? true);
+  const [tool, setTool] = useState<DrawingTool>('cursor');
+  const [drawings, setDrawings] = useState<Drawing[]>([]);
+
+  const [dock, setDock] = useState<DockTab>(prefs.dock ?? 'executions');
+  const [zen, setZen] = useState(false);
+  const [menu, setMenu] = useState<'chart' | 'settings' | null>(null);
+  const [modal, setModal] = useState<'symbol' | 'indicators' | null>(null);
+  const [search, setSearch] = useState('');
+  const [watchlist, setWatchlist] = useState<string[]>(prefs.watchlist ?? DEFAULT_WATCHLIST);
+  const [tickers, setTickers] = useState<Record<string, Ticker>>({});
+  const [screenshot, setScreenshot] = useState({ signal: 0, name: 'chart' });
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -134,6 +290,8 @@ export const BacktestView: React.FC = () => {
   const candle = candles[Math.min(cursor, candles.length - 1)];
   const progress = candles.length > 1 ? (cursor / (candles.length - 1)) * 100 : 0;
 
+  const trades = session.trades;
+  const orders = session.orders;
   const stats = useMemo(() => computeStats(trades, balance), [trades, balance]);
   const active = trades.find((trade) => trade.exit === undefined) ?? null;
   const equity = balance + stats.netPnl;
@@ -146,17 +304,47 @@ export const BacktestView: React.FC = () => {
 
   /* ---------- persisted preferences ---------- */
   useEffect(() => {
-    const next: Prefs = { marketId, timeframe, balance, riskPct, stopMult, rewardR, speed, overlays };
+    const next: Prefs = { marketId, timeframe, balance, riskPct, stopMult, rewardR, speed, overlays, periods, settings, chartType, magnet, dock, watchlist };
     try {
       window.localStorage.setItem(PREFS_KEY, JSON.stringify(next));
     } catch {
       /* storage can be unavailable in private mode — preferences are optional */
     }
-  }, [marketId, timeframe, balance, riskPct, stopMult, rewardR, speed, overlays]);
+  }, [marketId, timeframe, balance, riskPct, stopMult, rewardR, speed, overlays, periods, settings, chartType, magnet, dock, watchlist]);
 
   useEffect(() => {
     cursorRef.current = cursor;
   }, [cursor]);
+
+  useEffect(() => {
+    if (!zen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [zen]);
+
+  /* ---------- live watchlist quotes ---------- */
+  useEffect(() => {
+    const symbols = MARKETS.map((item) => item.binance).filter((symbol): symbol is string => Boolean(symbol));
+    let cancelled = false;
+    const load = () => {
+      fetchTickers(symbols)
+        .then((next) => {
+          if (!cancelled) setTickers(next);
+        })
+        .catch(() => {
+          /* quotes are decoration — ignore network hiccups */
+        });
+    };
+    load();
+    const timer = window.setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   /* ---------- load data whenever market / timeframe changes ---------- */
   const applyDataset = useCallback((data: Candle[], label: string) => {
@@ -164,7 +352,8 @@ export const BacktestView: React.FC = () => {
     const start = Math.max(1, Math.min(data.length - 2, Math.floor(data.length * 0.35)));
     cursorRef.current = start;
     setCursor(start);
-    setTrades([]);
+    setSession({ trades: [], orders: [] });
+    setDrawings([]);
     setPlaying(false);
     setFeedback('');
     setSource(label);
@@ -203,14 +392,14 @@ export const BacktestView: React.FC = () => {
   }, [marketId, timeframe, applyDataset]);
 
   /* ---------- replay engine ---------- */
-  const advanceTo = useCallback((target: number, settle = true) => {
+  const advanceTo = useCallback((target: number) => {
     const from = cursorRef.current;
     const next = Math.max(0, Math.min(candles.length - 1, Math.round(target)));
     if (next === from) return;
     cursorRef.current = next;
     setCursor(next);
-    if (settle && next > from) {
-      setTrades((current) => settleTrades(current, candles, from + 1, next));
+    if (next > from) {
+      setSession((state) => advanceSession(state, candles, from, next));
       setFeedback('');
     }
   }, [candles]);
@@ -232,57 +421,177 @@ export const BacktestView: React.FC = () => {
   }, [playing, speed, candles.length, advanceTo]);
 
   const togglePlay = useCallback(() => {
-    if (cursorRef.current >= candles.length - 1) advanceTo(0, false);
+    if (cursorRef.current >= candles.length - 1) {
+      cursorRef.current = 0;
+      setCursor(0);
+    }
     setPlaying((value) => !value);
-  }, [advanceTo, candles.length]);
+  }, [candles.length]);
 
-  /* ---------- order ticket ---------- */
-  const atr = atrAt(candles, cursor, 14);
+  /* ---------- order ticket numbers ---------- */
+  const atr = useMemo(() => atrAt(candles, cursor, periods.atrLength) ?? atrAt(candles, cursor, 14), [candles, cursor, periods.atrLength]);
   const stopDistance = atr ? atr * stopMult : 0;
   const riskAmount = (equity * riskPct) / 100;
+  const entryRef = orderKind === 'limit' && Number(limitPrice) > 0 ? Number(limitPrice) : candle?.close ?? 0;
   const qty = stopDistance > 0 && riskAmount > 0 ? riskAmount / stopDistance : 0;
 
-  const openPosition = useCallback((side: Side) => {
-    if (active || !candle) return;
-    const currentAtr = atrAt(candles, cursorRef.current, 14);
-    if (!currentAtr) {
-      setFeedback('Need a few more candles before the ATR stop can be calculated — step forward.');
+  const longStop = entryRef - stopDistance;
+  const longTarget = entryRef + stopDistance * rewardR;
+  const shortStop = entryRef + stopDistance;
+  const shortTarget = entryRef - stopDistance * rewardR;
+
+  useEffect(() => {
+    if (!candle) return;
+    setLimitPrice(candle.close.toFixed(digits));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketId, timeframe, digits]);
+
+  const guardTicket = () => {
+    if (!candle) return 'No candle loaded yet.';
+    if (active) return 'A position is already open — manage it before adding a new entry.';
+    if (orders.length) return 'A working limit order exists — cancel it first.';
+    if (!(stopDistance > 0) || !(riskAmount > 0)) return 'Set a positive balance and risk %, and let a few more candles load.';
+    return '';
+  };
+
+  const openMarket = useCallback((side: Side) => {
+    const blocked = guardTicket();
+    if (blocked || !candle) {
+      setFeedback(blocked);
       return;
     }
     const price = candle.close;
-    const distance = currentAtr * stopMult;
+    const distance = atr ? atr * stopMult : 0;
     const risk = (equity * riskPct) / 100;
-    if (!(distance > 0) || !(risk > 0)) {
-      setFeedback('Set a positive balance, risk % and stop distance first.');
-      return;
-    }
     const size = risk / distance;
-    setTrades((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
-        side,
-        entry: price,
-        stop: side === 'long' ? price - distance : price + distance,
-        target: side === 'long' ? price + distance * rewardR : price - distance * rewardR,
-        qty: size,
-        risk,
-        entryTime: Number(candle.time),
-      },
-    ]);
+    setSession((state) => ({
+      ...state,
+      trades: [
+        ...state.trades,
+        {
+          id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+          side,
+          entry: price,
+          stop: side === 'long' ? price - distance : price + distance,
+          target: side === 'long' ? price + distance * rewardR : price - distance * rewardR,
+          qty: size,
+          risk,
+          entryTime: Number(candle.time),
+          entryIndex: cursorRef.current,
+          orderType: 'market',
+        },
+      ],
+    }));
     setFeedback('');
     setPlaying(false);
-  }, [active, candle, candles, cursor, stopMult, equity, riskPct, rewardR]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candle, atr, stopMult, equity, riskPct, rewardR, active, orders.length]);
+
+  const placeLimit = useCallback((side: Side) => {
+    const blocked = guardTicket();
+    if (blocked || !candle) {
+      setFeedback(blocked);
+      return;
+    }
+    const price = Number(limitPrice);
+    if (!Number.isFinite(price) || price <= 0) {
+      setFeedback('Enter a valid limit price.');
+      return;
+    }
+    const distance = atr ? atr * stopMult : 0;
+    const risk = (equity * riskPct) / 100;
+    const size = risk / distance;
+    setSession((state) => ({
+      ...state,
+      orders: [
+        ...state.orders,
+        {
+          id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+          side,
+          price,
+          stop: side === 'long' ? price - distance : price + distance,
+          target: side === 'long' ? price + distance * rewardR : price - distance * rewardR,
+          qty: size,
+          risk,
+          createdAt: Number(candle.time),
+          createdIndex: cursorRef.current,
+        },
+      ],
+    }));
+    setFeedback(side === 'long' && price >= candle.close ? 'Buy limit is at/above market — it will fill on the next candle.' : '');
+    setPlaying(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candle, limitPrice, atr, stopMult, equity, riskPct, rewardR, active, orders.length]);
+
+  const cancelOrder = useCallback((id: string) => {
+    setSession((state) => ({ ...state, orders: state.orders.filter((order) => order.id !== id) }));
+  }, []);
 
   const closeActive = useCallback(() => {
     if (!active || !candle) return;
-    setTrades((current) => current.map((trade) => (trade.id !== active.id ? trade : closeTrade(trade, candle.close, Number(candle.time), 'manual'))));
+    setSession((state) => ({
+      ...state,
+      trades: state.trades.map((trade) =>
+        trade.id !== active.id ? trade : closeTrade(trade, candle.close, Number(candle.time), 'manual', cursorRef.current),
+      ),
+    }));
+    setFeedback('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, candle]);
 
   const moveToBreakEven = useCallback(() => {
     if (!active) return;
-    setTrades((current) => current.map((trade) => (trade.id === active.id ? { ...trade, stop: trade.entry } : trade)));
+    setSession((state) => ({
+      ...state,
+      trades: state.trades.map((trade) => (trade.id === active.id ? { ...trade, stop: trade.entry } : trade)),
+    }));
+    setFeedback('Stop moved to break-even.');
   }, [active]);
+
+  const closeHalf = useCallback(() => {
+    if (!active || !candle) return;
+    setSession((state) => {
+      const { closed, remaining } = partialClose(active, 0.5, candle.close, Number(candle.time), cursorRef.current);
+      return { ...state, trades: [...state.trades.filter((trade) => trade.id !== active.id), closed, remaining] };
+    });
+    setFeedback('Closed half of the position at market.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, candle]);
+
+  const reversePosition = useCallback(() => {
+    if (!active || !candle) return;
+    const blocked = !(stopDistance > 0) || !(riskAmount > 0);
+    if (blocked) {
+      setFeedback('Not enough data to size the reversed trade.');
+      return;
+    }
+    const price = candle.close;
+    const risk = (equity * riskPct) / 100;
+    const size = risk / stopDistance;
+    const side: Side = active.side === 'long' ? 'short' : 'long';
+    setSession((state) => ({
+      ...state,
+      trades: [
+        ...state.trades.map((trade) =>
+          trade.id !== active.id ? trade : closeTrade(trade, price, Number(candle.time), 'manual', cursorRef.current),
+        ),
+        {
+          id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+          side,
+          entry: price,
+          stop: side === 'long' ? price - stopDistance : price + stopDistance,
+          target: side === 'long' ? price + stopDistance * rewardR : price - stopDistance * rewardR,
+          qty: size,
+          risk,
+          entryTime: Number(candle.time),
+          entryIndex: cursorRef.current,
+          orderType: 'market',
+        },
+      ],
+    }));
+    setFeedback(`Reversed to ${side}.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, candle, equity, riskPct, stopDistance, riskAmount, rewardR]);
 
   /* ---------- keyboard shortcuts ---------- */
   useEffect(() => {
@@ -290,7 +599,12 @@ export const BacktestView: React.FC = () => {
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       const key = event.key.toLowerCase();
-      if (event.code === 'Space') {
+      if (event.key === 'Escape') {
+        setMenu(null);
+        setModal(null);
+        setZen(false);
+        setTool('cursor');
+      } else if (event.code === 'Space') {
         event.preventDefault();
         togglePlay();
       } else if (event.key === 'ArrowRight') {
@@ -302,26 +616,32 @@ export const BacktestView: React.FC = () => {
         setPlaying(false);
         advanceTo(cursorRef.current - (event.shiftKey ? 10 : 1));
       } else if (key === 'l') {
-        openPosition('long');
+        if (orderKind === 'limit') placeLimit('long');
+        else openMarket('long');
       } else if (key === 's') {
-        openPosition('short');
+        if (orderKind === 'limit') placeLimit('short');
+        else openMarket('short');
       } else if (key === 'c') {
         closeActive();
+      } else if (key === 'b') {
+        moveToBreakEven();
+      } else if (key === 'f') {
+        setZen((value) => !value);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [advanceTo, openPosition, closeActive, togglePlay]);
+  }, [advanceTo, openMarket, placeLimit, closeActive, moveToBreakEven, togglePlay, orderKind]);
 
-  /* ---------- indicators dropdown ---------- */
+  /* ---------- dropdown dismissal ---------- */
   useEffect(() => {
-    if (!indicatorsOpen) return;
+    if (!menu) return;
     const onPointerDown = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setIndicatorsOpen(false);
+      if (!menuRef.current?.contains(event.target as Node)) setMenu(null);
     };
     document.addEventListener('mousedown', onPointerDown);
     return () => document.removeEventListener('mousedown', onPointerDown);
-  }, [indicatorsOpen]);
+  }, [menu]);
 
   /* ---------- chart legend values ---------- */
   const legend = useMemo(() => {
@@ -330,16 +650,22 @@ export const BacktestView: React.FC = () => {
       for (let i = series.length - 1; i >= 0; i -= 1) if (series[i] !== null) return series[i] as number;
       return null;
     };
+    const macd = macdSeries(visible, periods.macdFast, periods.macdSlow, periods.macdSignal);
+    const stoch = stochRsiSeries(visible, periods.rsiLength, periods.stochLength, periods.stochK, periods.stochD);
     return {
-      ema9: lastOf(emaSeries(visible, 9)),
-      ema21: lastOf(emaSeries(visible, 21)),
-      ema50: lastOf(emaSeries(visible, 50)),
-      rsi: lastOf(rsiSeries(visible, 14)),
-      atr: lastOf(atrSeries(visible, 14)),
+      ema1: lastOf(emaSeries(visible, periods.ema1)),
+      ema2: lastOf(emaSeries(visible, periods.ema2)),
+      ema3: lastOf(emaSeries(visible, periods.ema3)),
+      ema4: lastOf(emaSeries(visible, periods.ema4)),
+      vwap: lastOf(vwapSeries(visible)),
+      rsi: lastOf(rsiSeries(visible, periods.rsiLength)),
+      macd: lastOf(macd.histogram),
+      stoch: lastOf(stoch.k),
+      atr: lastOf(atrSeries(visible, periods.atrLength)),
     };
-  }, [candles, cursor]);
+  }, [candles, cursor, periods]);
 
-  /* ---------- CSV import / reset ---------- */
+  /* ---------- CSV import / export / reset ---------- */
   const importCsv = async (file?: File) => {
     if (!file) return;
     setNotice('');
@@ -355,8 +681,41 @@ export const BacktestView: React.FC = () => {
     }
   };
 
+  const exportCsv = () => {
+    if (!trades.length) {
+      setNotice('Nothing to export yet — place at least one trade.');
+      return;
+    }
+    const header = ['#', 'side', 'order_type', 'entry', 'exit', 'size', 'risk', 'r_multiple', 'pnl', 'entry_time', 'exit_time', 'exit_reason'];
+    const rows = [...trades]
+      .sort((a, b) => a.entryTime - b.entryTime)
+      .map((trade, index) => [
+        index + 1,
+        trade.side,
+        trade.orderType ?? 'market',
+        trade.entry,
+        trade.exit ?? '',
+        trade.qty,
+        trade.risk,
+        trade.rMultiple ?? '',
+        trade.pnl ?? '',
+        new Date(trade.entryTime * 1000).toISOString(),
+        trade.exitTime ? new Date(trade.exitTime * 1000).toISOString() : '',
+        trade.exitReason ?? 'open',
+      ]);
+    const csv = [header, ...rows].map((row) => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `trader-vault-${marketId}-${timeframe}-trades.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const resetSession = () => {
-    setTrades([]);
+    setSession({ trades: [], orders: [] });
+    setDrawings([]);
     setPlaying(false);
     setFeedback('');
     const start = Math.max(1, Math.min(candles.length - 2, Math.floor(candles.length * 0.35)));
@@ -370,7 +729,53 @@ export const BacktestView: React.FC = () => {
     advanceTo(Math.round((candles.length - 1) * fraction));
   };
 
+  const takeScreenshot = () => setScreenshot((current) => ({ signal: current.signal + 1, name: `${marketId}-${timeframe}-${Date.now()}` }));
+
+  const toggleWatch = (id: string) => {
+    setWatchlist((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  };
+
+  const filteredMarkets = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return MARKETS;
+    return MARKETS.filter((item) => item.label.toLowerCase().includes(query) || item.id.toLowerCase().includes(query));
+  }, [search]);
+
   const directionTone = !candle ? 'neutral' : candle.close >= candle.open ? 'up' : 'down';
+  const priceFor = (id: string, fallback: number) => {
+    const item = getMarket(id);
+    const ticker = item.binance ? tickers[item.binance] : undefined;
+    if (ticker) return { price: ticker.price, changePct: ticker.changePct };
+    if (item.id === marketId && candle) return { price: candle.close, changePct: 0 };
+    return { price: fallback, changePct: 0 };
+  };
+
+  const rBuckets = useMemo(() => {
+    const bounds = [-Infinity, -2, -1, 0, 1, 2, Infinity];
+    const labels = ['≤ -2R', '-2 to -1R', '-1 to 0R', '0 to 1R', '1 to 2R', '≥ 2R'];
+    return labels.map((label, index) => ({
+      label,
+      count: stats.rValues.filter((value) => value > bounds[index] && value <= bounds[index + 1]).length,
+    }));
+  }, [stats.rValues]);
+  const rMax = Math.max(1, ...rBuckets.map((bucket) => bucket.count));
+
+  const metricTiles: [string, string, string?][] = [
+    ['Net P&L', fmtSignedMoney(stats.netPnl), stats.netPnl > 0 ? 'up' : stats.netPnl < 0 ? 'down' : undefined],
+    ['Profit factor', stats.profitFactor === null ? '∞' : stats.profitFactor.toFixed(2)],
+    ['Win rate', `${stats.winRate.toFixed(0)}%`],
+    ['Avg R', `${fmtSigned(stats.avgR, 2)}R`, stats.avgR > 0 ? 'up' : stats.avgR < 0 ? 'down' : undefined],
+    ['Expectancy', fmtSignedMoney(stats.expectancy, 0)],
+    ['Max drawdown', `${fmtMoney(stats.maxDrawdown, 0)} · ${stats.maxDrawdownPct.toFixed(1)}%`],
+    ['Avg win / loss', `${fmtMoney(stats.avgWin, 0)} / ${fmtMoney(stats.avgLoss, 0)}`],
+    ['Best / worst', `${fmtSignedMoney(stats.best, 0)} / ${fmtSignedMoney(stats.worst, 0)}`],
+    ['Avg bars held', stats.avgBars.toFixed(1)],
+    ['Streaks', `${stats.longestWinStreak}W / ${stats.longestLossStreak}L`],
+    ['Break-even', String(stats.breakEven)],
+    ['Equity', fmtMoney(equity, 0)],
+  ];
+
+  const ticketBlocked = Boolean(active) || orders.length > 0;
 
   return (
     <div className="bt-page space-y-4">
@@ -382,7 +787,7 @@ export const BacktestView: React.FC = () => {
           </div>
           <h2 className="text-[28px] leading-tight font-medium tracking-tight text-black sm:text-[34px]">Backtesting</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Step through candles like a chart replay, size every trade by risk instead of gut feel, and watch your edge in R multiples.
+            A full charting desk: draw levels, stack studies, queue limit orders and replay candles bar by bar — every trade sized by risk.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -392,6 +797,13 @@ export const BacktestView: React.FC = () => {
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             <Upload size={14} /> Import OHLC CSV
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <Download size={14} /> Export trades
           </button>
           <button
             type="button"
@@ -427,152 +839,197 @@ export const BacktestView: React.FC = () => {
         <StatCard label="Profit factor" value={stats.profitFactor === null ? '∞' : stats.profitFactor.toFixed(2)} hint={`${fmtMoney(stats.grossProfit, 0)} won / ${fmtMoney(stats.grossLoss, 0)} lost`} icon={Gauge} />
         <StatCard label="Avg R" value={`${fmtSigned(stats.avgR, 2)}R`} hint={`Expectancy ${fmtSignedMoney(stats.expectancy, 0)}/trade`} tone={stats.avgR > 0 ? 'up' : stats.avgR < 0 ? 'down' : 'neutral'} icon={Crosshair} />
         <StatCard label="Max drawdown" value={fmtMoney(stats.maxDrawdown, 0)} hint={`${stats.maxDrawdownPct.toFixed(1)}% from equity peak`} tone={stats.maxDrawdown > 0 ? 'down' : 'neutral'} icon={TrendingDown} />
-        <StatCard label="Closed trades" value={String(stats.count).padStart(2, '0')} hint={active ? `${active.side === 'long' ? 'Long' : 'Short'} position open` : 'Practice executions'} icon={Target} />
+        <StatCard label="Closed trades" value={String(stats.count).padStart(2, '0')} hint={active ? `${active.side === 'long' ? 'Long' : 'Short'} position open` : orders.length ? `${orders.length} working order` : 'Practice executions'} icon={Target} />
       </div>
 
-      {/* ============ chart + order ticket ============ */}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_338px]">
-        <div className="min-w-0 space-y-4">
-          <div className="overflow-hidden rounded-[24px] bg-[#0c111a] shadow-[0_12px_36px_rgba(15,23,42,.12)]">
+      {/* ============ terminal ============ */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0">
+          <section className={`bt-terminal overflow-hidden rounded-[24px] bg-[#0c111a] shadow-[0_12px_36px_rgba(15,23,42,.12)] ${zen ? 'bt-zen' : ''}`}>
             {/* toolbar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-3 py-2.5 sm:px-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  aria-label="Instrument"
-                  value={marketId}
-                  onChange={(event) => setMarketId(event.target.value)}
-                  className="bt-dark-field !w-auto !py-1.5 !pl-2 !pr-7 !text-xs !font-semibold !text-white"
-                >
-                  <optgroup label="Crypto · live history">
-                    {MARKETS.filter((item) => item.kind === 'crypto').map((item) => (
-                      <option key={item.id} value={item.id}>{item.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Practice data">
-                    {MARKETS.filter((item) => item.kind === 'practice').map((item) => (
-                      <option key={item.id} value={item.id}>{item.label}</option>
-                    ))}
-                  </optgroup>
-                </select>
+            <div className="bt-topbar flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] px-2.5 py-2 sm:px-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button type="button" onClick={() => setModal('symbol')} className="bt-symbol" title="Search symbols (watchlist)">
+                  <span className="flex flex-col items-start leading-none">
+                    <span className="text-[13px] font-bold text-white">{shortName(market.label)}<span className="text-slate-500">/{quoteName(market.label)}</span></span>
+                    <span className="mt-1 text-[9px] font-medium uppercase tracking-wide text-slate-500">{market.kind === 'crypto' ? 'Binance spot' : 'Practice feed'}</span>
+                  </span>
+                  <ChevronDown size={13} className="text-slate-500" />
+                </button>
 
                 <div className="bt-seg">
                   {TIMEFRAMES.map((frame) => (
-                    <button
-                      key={frame.id}
-                      type="button"
-                      onClick={() => setTimeframe(frame.id)}
-                      className={`bt-seg-btn ${timeframe === frame.id ? 'is-active' : ''}`}
-                    >
+                    <button key={frame.id} type="button" onClick={() => setTimeframe(frame.id)} className={`bt-seg-btn ${timeframe === frame.id ? 'is-active' : ''}`}>
                       {frame.label}
                     </button>
                   ))}
                 </div>
 
-                <div className="relative" ref={menuRef}>
-                  <button
-                    type="button"
-                    onClick={() => setIndicatorsOpen((value) => !value)}
-                    aria-expanded={indicatorsOpen}
-                    className={`bt-tool ${indicatorsOpen ? 'is-active' : ''}`}
-                  >
-                    <SlidersHorizontal size={13} /> Indicators
+                <div className="relative">
+                  <button type="button" onClick={() => setMenu((value) => (value === 'chart' ? null : 'chart'))} className={`bt-tool ${menu === 'chart' ? 'is-active' : ''}`} title="Chart type">
+                    {(() => {
+                      const Icon = CHART_TYPES.find((item) => item.id === chartType)?.icon ?? CandlestickChart;
+                      return <Icon size={13} />;
+                    })()}
+                    <span className="hidden sm:inline">{CHART_TYPES.find((item) => item.id === chartType)?.label}</span>
+                    <ChevronDown size={11} />
                   </button>
-                  {indicatorsOpen && (
-                    <div className="absolute left-0 top-11 z-30 w-60 rounded-2xl border border-white/10 bg-[#131a26] p-2 shadow-2xl">
-                      {([
-                        ['ema9', 'EMA 9', '#38bdf8'],
-                        ['ema21', 'EMA 21', '#f59e0b'],
-                        ['ema50', 'EMA 50', '#a78bfa'],
-                        ['bollinger', 'Bollinger Bands (20, 2)', '#94a3b8'],
-                        ['volume', 'Volume', '#64748b'],
-                        ['rsi', 'RSI pane (14)', '#c084fc'],
-                      ] as [keyof ChartOverlays, string, string][]).map(([key, label, color]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setOverlays((current) => ({ ...current, [key]: !current[key] }))}
-                          className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-[11px] text-slate-300 hover:bg-white/[0.06]"
-                        >
-                          <span className="flex items-center gap-2">
-                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-                            {label}
-                          </span>
-                          <span className={`flex h-4 w-4 items-center justify-center rounded ${overlays[key] ? 'bg-emerald-400 text-[#0c111a]' : 'border border-white/15 text-transparent'}`}>
-                            <Check size={11} strokeWidth={3} />
-                          </span>
+                  {menu === 'chart' && (
+                    <div className="bt-menu left-0">
+                      {CHART_TYPES.map((item) => (
+                        <button key={item.id} type="button" onClick={() => { setChartType(item.id); setMenu(null); }} className={`bt-menu-item ${chartType === item.id ? 'is-active' : ''}`}>
+                          <item.icon size={13} /> <span className="flex-1 text-left">{item.label}</span>
+                          {chartType === item.id && <Check size={12} />}
                         </button>
                       ))}
-                      <div className="mt-1 border-t border-white/10 px-2.5 pb-1 pt-2 text-[10px] text-slate-500">Overlays redraw instantly on replay.</div>
+                    </div>
+                  )}
+                </div>
+
+                <button type="button" onClick={() => setModal('indicators')} className="bt-tool" title="Indicators & studies">
+                  <SlidersHorizontal size={13} /> <span className="hidden sm:inline">Indicators</span>
+                </button>
+
+                <div className="relative">
+                  <button type="button" onClick={() => setMenu((value) => (value === 'settings' ? null : 'settings'))} className={`bt-tool ${menu === 'settings' ? 'is-active' : ''}`} title="Chart settings">
+                    <Settings2 size={13} /> <span className="hidden lg:inline">Chart</span>
+                  </button>
+                  {menu === 'settings' && (
+                    <div className="bt-menu left-0 w-56">
+                      <div className="px-2 pb-1 pt-1 text-[9px] font-semibold uppercase tracking-wide text-slate-500">Canvas</div>
+                      {([
+                        ['grid', 'Show grid'],
+                        ['logScale', 'Logarithmic scale'],
+                        ['lastPriceLine', 'Last price line'],
+                      ] as [keyof ChartSettings, string][]).map(([key, label]) => (
+                        <button key={key} type="button" onClick={() => setSettings((current) => ({ ...current, [key]: !current[key] }))} className="bt-menu-item">
+                          <span className={`flex h-3.5 w-3.5 items-center justify-center rounded ${settings[key] ? 'bg-emerald-400 text-[#0c111a]' : 'border border-white/20 text-transparent'}`}><Check size={9} strokeWidth={3} /></span>
+                          <span className="flex-1 text-left">{label}</span>
+                        </button>
+                      ))}
+                      <div className="my-1 border-t border-white/10" />
+                      <button type="button" onClick={() => setSettings({ ...DEFAULT_SETTINGS })} className="bt-menu-item"><RotateCcw size={12} /><span className="flex-1 text-left">Reset chart settings</span></button>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
                 {loading ? (
-                  <span className="inline-flex items-center gap-1.5 text-[10px] text-slate-400"><Loader2 size={12} className="animate-spin" /> loading history…</span>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-slate-400"><Loader2 size={12} className="animate-spin" /> loading…</span>
                 ) : (
-                  <span className="hidden truncate text-[10px] text-slate-500 sm:inline">{source}</span>
+                  <span className="hidden max-w-[210px] truncate text-[10px] text-slate-500 lg:inline">{source}</span>
                 )}
-                <button
-                  type="button"
-                  onClick={() => jumpTo(1)}
-                  title="Jump to the latest candle"
-                  className="bt-tool"
-                >
-                  <Download size={13} className="rotate-180" /> Latest
+                <button type="button" onClick={takeScreenshot} className="bt-tool" title="Save chart image"><Camera size={13} /></button>
+                <button type="button" onClick={() => jumpTo(1)} className="bt-tool" title="Jump to the latest candle"><Download size={13} className="rotate-180" /> <span className="hidden sm:inline">Latest</span></button>
+                <button type="button" onClick={() => setZen((value) => !value)} className="bt-tool" title={zen ? 'Exit fullscreen (Esc)' : 'Fullscreen (F)'}>
+                  {zen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
                 </button>
               </div>
             </div>
 
-            {/* chart */}
-            <div className="relative h-[380px] sm:h-[480px]">
-              <BacktestChart candles={candles} cursor={cursor} digits={digits} overlays={overlays} trades={trades} position={position} />
+            {/* chart + drawing rail */}
+            <div className="flex min-h-0 flex-1">
+              <nav className="bt-rail" aria-label="Drawing tools">
+                {DRAW_TOOLS.map((item) => (
+                  <button key={item.id} type="button" onClick={() => setTool(item.id)} title={item.hint} className={`bt-rail-btn ${tool === item.id ? 'is-active' : ''}`}>
+                    <item.icon size={15} />
+                  </button>
+                ))}
+                <div className="bt-rail-sep" />
+                <button type="button" onClick={() => setMagnet((value) => !value)} title="Magnet snapping to OHLC" className={`bt-rail-btn ${magnet ? 'is-active' : ''}`}>
+                  <Magnet size={15} />
+                </button>
+                <button type="button" onClick={() => setDrawings([])} title="Remove all drawings" disabled={!drawings.length} className="bt-rail-btn disabled:opacity-30">
+                  <Trash2 size={15} />
+                </button>
+              </nav>
 
-              <div className="pointer-events-none absolute left-3 top-3 z-10 space-y-1">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold sm:text-[11px]">
-                  <span className="text-white">{market.label}</span>
-                  <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-slate-300">{timeframe.toUpperCase()}</span>
-                  {candle && (
-                    <span className="bt-mono flex flex-wrap gap-x-2 text-[10px] font-normal text-slate-400">
-                      <span>O <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.open, digits)}</span></span>
-                      <span>H <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.high, digits)}</span></span>
-                      <span>L <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.low, digits)}</span></span>
-                      <span>C <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.close, digits)}</span></span>
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
-                  {overlays.ema9 && <span><span className="text-sky-400">EMA 9</span> {fmtPrice(legend.ema9 ?? undefined, digits)}</span>}
-                  {overlays.ema21 && <span><span className="text-amber-400">EMA 21</span> {fmtPrice(legend.ema21 ?? undefined, digits)}</span>}
-                  {overlays.ema50 && <span><span className="text-violet-400">EMA 50</span> {fmtPrice(legend.ema50 ?? undefined, digits)}</span>}
-                  {overlays.rsi && <span><span className="text-fuchsia-400">RSI</span> {legend.rsi === null ? '—' : legend.rsi.toFixed(1)}</span>}
-                  <span><span className="text-slate-400">ATR 14</span> {legend.atr === null ? '—' : fmtPrice(legend.atr, digits)}</span>
-                </div>
-              </div>
+              <div className="bt-chart-area relative h-[380px] min-w-0 flex-1 sm:h-[500px]">
+                <BacktestChart
+                  candles={candles}
+                  cursor={cursor}
+                  digits={digits}
+                  chartType={chartType}
+                  overlays={overlays}
+                  periods={periods}
+                  settings={settings}
+                  trades={trades}
+                  position={position}
+                  orders={orders}
+                  drawings={drawings}
+                  tool={tool}
+                  magnet={magnet}
+                  screenshotSignal={screenshot.signal}
+                  screenshotName={screenshot.name}
+                  onAddDrawing={(drawing) => setDrawings((current) => [...current, drawing])}
+                  onDeleteDrawing={(id) => setDrawings((current) => current.filter((item) => item.id !== id))}
+                />
 
-              {loading && (
-                <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0c111a]/70 backdrop-blur-[2px]">
-                  <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs text-slate-200">
-                    <Loader2 size={14} className="animate-spin" /> Fetching candles…
+                <div className="pointer-events-none absolute left-2.5 top-2 z-10 max-w-[calc(100%-20px)] space-y-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold">
+                    <span className="text-white">{shortName(market.label)}/{quoteName(market.label)}</span>
+                    <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-slate-300">{timeframe.toUpperCase()}</span>
+                    {candle && (
+                      <span className="bt-mono flex flex-wrap gap-x-1.5 text-[10px] font-normal text-slate-400">
+                        <span>O <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.open, digits)}</span></span>
+                        <span>H <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.high, digits)}</span></span>
+                        <span>L <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.low, digits)}</span></span>
+                        <span>C <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.close, digits)}</span></span>
+                        {candle.volume > 0 && <span className="text-slate-500">V {fmtCompact(candle.volume)}</span>}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[9.5px] text-slate-500">
+                    {overlays.ema1 && <span><span className="text-sky-400">EMA {periods.ema1}</span> {fmtPrice(legend.ema1 ?? undefined, digits)}</span>}
+                    {overlays.ema2 && <span><span className="text-amber-400">EMA {periods.ema2}</span> {fmtPrice(legend.ema2 ?? undefined, digits)}</span>}
+                    {overlays.ema3 && <span><span className="text-violet-400">EMA {periods.ema3}</span> {fmtPrice(legend.ema3 ?? undefined, digits)}</span>}
+                    {overlays.ema4 && <span><span className="text-pink-400">EMA {periods.ema4}</span> {fmtPrice(legend.ema4 ?? undefined, digits)}</span>}
+                    {overlays.vwap && <span><span className="text-cyan-400">VWAP</span> {fmtPrice(legend.vwap ?? undefined, digits)}</span>}
+                    {overlays.rsi && <span><span className="text-fuchsia-400">RSI {periods.rsiLength}</span> {legend.rsi === null ? '—' : legend.rsi.toFixed(1)}</span>}
+                    {overlays.macd && <span><span className="text-sky-400">MACD</span> {legend.macd === null ? '—' : legend.macd.toFixed(2)}</span>}
+                    {overlays.stoch && <span><span className="text-amber-400">Stoch RSI</span> {legend.stoch === null ? '—' : legend.stoch.toFixed(1)}</span>}
+                    <span><span className="text-slate-400">ATR {periods.atrLength}</span> {legend.atr === null ? '—' : fmtPrice(legend.atr, digits)}</span>
                   </div>
                 </div>
-              )}
 
-              {active && candle && (
-                <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 rounded-lg border border-white/10 bg-[#101722]/90 px-2.5 py-1.5 text-[10px] backdrop-blur">
-                  <span className={active.side === 'long' ? 'text-emerald-400' : 'text-rose-400'}>{active.side === 'long' ? 'LONG' : 'SHORT'} · {fmtPrice(active.entry, digits)}</span>
-                  <span className="text-slate-600">•</span>
-                  <span className={openPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>uPnL {fmtSignedMoney(openPnl)}</span>
-                  <span className="text-slate-600">•</span>
-                  <span className="text-slate-400">{active.risk > 0 ? `${fmtSigned(openPnl / active.risk, 2)}R` : '—'}</span>
+                {loading && (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0c111a]/70 backdrop-blur-[2px]">
+                    <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs text-slate-200">
+                      <Loader2 size={14} className="animate-spin" /> Fetching candles…
+                    </div>
+                  </div>
+                )}
+
+                <div className="absolute bottom-2.5 left-2.5 z-10 flex flex-wrap items-center gap-1.5">
+                  {active && candle && (
+                    <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#101722]/90 px-2.5 py-1.5 text-[10px] backdrop-blur">
+                      <span className={active.side === 'long' ? 'text-emerald-400' : 'text-rose-400'}>{active.side === 'long' ? 'LONG' : 'SHORT'} · {fmtPrice(active.entry, digits)}</span>
+                      <span className="text-slate-600">•</span>
+                      <span className={openPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>uPnL {fmtSignedMoney(openPnl)}</span>
+                      <span className="text-slate-600">•</span>
+                      <span className="text-slate-400">{active.risk > 0 ? `${fmtSigned(openPnl / active.risk, 2)}R` : '—'}</span>
+                    </div>
+                  )}
+                  {orders.map((order) => (
+                    <div key={order.id} className="flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-1.5 text-[10px] text-amber-200 backdrop-blur">
+                      <span>{order.side === 'long' ? 'BUY' : 'SELL'} LIMIT @ {fmtPrice(order.price, digits)}</span>
+                      <button type="button" onClick={() => cancelOrder(order.id)} className="text-amber-300/70 hover:text-white" title="Cancel order"><X size={11} /></button>
+                    </div>
+                  ))}
                 </div>
-              )}
+
+                {tool !== 'cursor' && tool !== 'crosshair' && (
+                  <button type="button" onClick={() => setTool('cursor')} className="absolute right-2.5 top-2 z-20 rounded-lg border border-white/10 bg-[#101722]/90 px-2 py-1 text-[10px] text-slate-300 backdrop-blur hover:text-white">
+                    <X size={11} className="mr-1 inline" /> exit drawing
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* replay bar */}
-            <div className="border-t border-white/[0.07] px-3 pb-3 pt-3 sm:px-4">
-              <div className="mb-2 flex items-center justify-between text-[10px] text-slate-500">
+            <div className="border-t border-white/[0.07] px-2.5 pb-2.5 pt-2.5 sm:px-3">
+              <div className="mb-1.5 flex items-center justify-between text-[10px] text-slate-500">
                 <span className="bt-mono">
                   {candle ? new Date(Number(candle.time) * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                 </span>
@@ -591,207 +1048,220 @@ export const BacktestView: React.FC = () => {
                 className="bt-range w-full"
                 style={{ '--progress': `${progress}%` } as React.CSSProperties}
               />
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <button type="button" onClick={() => jumpTo(0)} title="Start of data" className="bt-control"><SkipBack size={15} /></button>
                   <button type="button" onClick={() => advanceTo(cursorRef.current - 1)} title="Previous candle (←)" className="bt-control"><ChevronLeft size={17} /></button>
-                  <button
-                    type="button"
-                    onClick={togglePlay}
-                    title="Play / pause (Space)"
-                    className="flex h-9 w-11 items-center justify-center rounded-xl bg-white text-zinc-900 hover:bg-emerald-300"
-                  >
+                  <button type="button" onClick={togglePlay} title="Play / pause (Space)" className="flex h-9 w-11 items-center justify-center rounded-xl bg-white text-zinc-900 hover:bg-emerald-300">
                     {playing ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
                   </button>
                   <button type="button" onClick={() => advanceTo(cursorRef.current + 1)} title="Next candle (→)" className="bt-control"><ChevronRight size={17} /></button>
                   <button type="button" onClick={() => advanceTo(cursorRef.current + 10)} title="Skip 10 candles (Shift+→)" className="bt-control"><SkipForward size={15} /></button>
-                  <span className="ml-2 hidden items-center gap-1 text-[10px] text-slate-500 lg:flex">
-                    <kbd>←</kbd><kbd>→</kbd> step <kbd>Space</kbd> play <kbd>L</kbd>/<kbd>S</kbd> trade <kbd>C</kbd> close
+                  <button type="button" onClick={() => jumpTo(1)} title="End of data" className="bt-control"><ChevronRight size={15} /><ChevronRight size={15} className="-ml-2" /></button>
+                  <span className="ml-1.5 hidden items-center gap-1 text-[10px] text-slate-500 2xl:flex">
+                    <kbd>←</kbd><kbd>→</kbd> step <kbd>Space</kbd> play <kbd>L</kbd>/<kbd>S</kbd> trade <kbd>C</kbd> close <kbd>B</kbd> BE
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-slate-500">Speed</span>
-                  <select
-                    value={speed}
-                    onChange={(event) => setSpeed(Number(event.target.value))}
-                    aria-label="Playback speed"
-                    className="bt-dark-field !w-auto !py-1.5 !text-[11px]"
-                  >
+                  <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))} aria-label="Playback speed" className="bt-dark-field !w-auto !py-1.5 !text-[11px]">
                     {[0.5, 1, 2, 4, 8, 16].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
                   </select>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* equity + trade log */}
-          <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <section className="rounded-2xl bg-white p-4 shadow-[0_2px_14px_rgba(15,23,42,.05)]">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-zinc-900">Equity curve</h3>
-                  <p className="mt-0.5 text-[10px] text-slate-400">Closed trades only</p>
-                </div>
-                <span className={`rounded-full px-2 py-1 text-[10px] font-semibold tabular-nums ${stats.netPnl >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                  {pct(balance > 0 ? (stats.netPnl / balance) * 100 : 0)}
+            {/* dock */}
+            <div className="bt-dock border-t border-white/[0.07]">
+              <div className="flex items-center gap-1 overflow-x-auto px-2 pt-1.5">
+                {([
+                  ['executions', `Executions · ${trades.length}`],
+                  ['statistics', 'Strategy stats'],
+                  ['distribution', 'R distribution'],
+                ] as [DockTab, string][]).map(([id, label]) => (
+                  <button key={id} type="button" onClick={() => setDock(id)} className={`bt-dock-tab ${dock === id ? 'is-active' : ''}`}>{label}</button>
+                ))}
+                <span className="ml-auto hidden items-center gap-1 pr-1 text-[9px] text-slate-600 sm:flex">
+                  <Circle /> replay dock
                 </span>
               </div>
-              <div className="mt-3">
-                <EquityCurve points={stats.equity} start={balance} />
-              </div>
-              <div className="mt-2 flex items-end justify-between">
-                <div>
-                  <div className="text-[10px] text-slate-400">Equity</div>
-                  <div className="text-lg font-semibold tabular-nums text-zinc-900">{fmtMoney(equity)}</div>
-                </div>
-                <div className="text-right text-[10px] text-slate-400">
-                  <div>Best {fmtMoney(stats.best)}</div>
-                  <div>Worst {fmtMoney(stats.worst)}</div>
-                </div>
-              </div>
-            </section>
-
-            <section className="min-w-0 rounded-2xl bg-white p-4 shadow-[0_2px_14px_rgba(15,23,42,.05)]">
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-zinc-900">Execution log</h3>
-                  <p className="mt-0.5 text-[10px] text-slate-400">Every simulated fill in this replay session.</p>
-                </div>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-500">{stats.count} closed</span>
-              </div>
-
-              {trades.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center">
-                  <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-400"><Crosshair size={16} /></div>
-                  <p className="text-xs font-medium text-slate-600">No executions yet</p>
-                  <p className="mt-1 text-[10px] text-slate-400">Press <kbd>L</kbd> for a long or <kbd>S</kbd> for a short at the current candle.</p>
-                </div>
-              ) : (
-                <div className="-mx-1 max-h-64 overflow-auto px-1">
-                  <table className="w-full min-w-[540px] border-separate border-spacing-y-1 text-left text-[11px]">
-                    <thead className="text-[10px] uppercase tracking-wide text-slate-400">
-                      <tr>
-                        <th className="rounded-l-xl px-2 py-1.5 font-medium">#</th>
-                        <th className="px-2 py-1.5 font-medium">Side</th>
-                        <th className="px-2 py-1.5 font-medium">Entry</th>
-                        <th className="px-2 py-1.5 font-medium">Exit</th>
-                        <th className="px-2 py-1.5 font-medium">Size</th>
-                        <th className="px-2 py-1.5 font-medium">R</th>
-                        <th className="px-2 py-1.5 font-medium">P&L</th>
-                        <th className="rounded-r-xl px-2 py-1.5 font-medium">Exit type</th>
-                      </tr>
-                    </thead>
-                    <tbody className="tabular-nums">
-                      {[...trades].sort((a, b) => a.entryTime - b.entryTime).map((trade, index) => {
-                        const open = trade.exit === undefined;
-                        return (
-                          <tr key={trade.id} className="bg-slate-50/80 text-slate-600">
-                            <td className="rounded-l-xl px-2 py-2 text-slate-400">{index + 1}</td>
-                            <td className="px-2 py-2">
-                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${trade.side === 'long' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                {trade.side === 'long' ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
-                                {trade.side === 'long' ? 'Long' : 'Short'}
-                              </span>
-                            </td>
-                            <td className="px-2 py-2">{fmtPrice(trade.entry, digits)}</td>
-                            <td className="px-2 py-2">{open ? <span className="text-amber-600">open</span> : fmtPrice(trade.exit, digits)}</td>
-                            <td className="px-2 py-2 text-slate-500">{fmtQty(trade.qty)}</td>
-                            <td className={`px-2 py-2 font-semibold ${open ? 'text-slate-400' : (trade.rMultiple ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                              {open ? '—' : `${fmtSigned(trade.rMultiple, 2)}R`}
-                            </td>
-                            <td className={`px-2 py-2 font-semibold ${open ? 'text-slate-400' : (trade.pnl ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                              {open ? '—' : fmtSignedMoney(trade.pnl)}
-                            </td>
-                            <td className="rounded-r-xl px-2 py-2 text-[10px] uppercase tracking-wide text-slate-400">
-                              {open ? 'in progress' : trade.exitReason === 'target' ? 'target' : trade.exitReason === 'stop' ? 'stop' : 'manual'}
-                            </td>
+              <div className="bt-dock-body px-2.5 py-2.5 sm:px-3">
+                {dock === 'executions' && (
+                  trades.length === 0 ? (
+                    <div className="flex items-center gap-2 rounded-xl border border-dashed border-white/10 px-3 py-6 text-[11px] text-slate-500">
+                      <Crosshair size={14} /> No executions yet — press <kbd>L</kbd> or <kbd>S</kbd> (or use the ticket) to take a trade at the current candle.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[720px] text-left text-[11px]">
+                        <thead className="text-[9px] uppercase tracking-wide text-slate-500">
+                          <tr>
+                            <th className="px-2 py-1 font-medium">#</th>
+                            <th className="px-2 py-1 font-medium">Side</th>
+                            <th className="px-2 py-1 font-medium">Type</th>
+                            <th className="px-2 py-1 font-medium">Entry</th>
+                            <th className="px-2 py-1 font-medium">Exit</th>
+                            <th className="px-2 py-1 font-medium">Size</th>
+                            <th className="px-2 py-1 font-medium">R</th>
+                            <th className="px-2 py-1 font-medium">P&L</th>
+                            <th className="px-2 py-1 font-medium">Bars</th>
+                            <th className="px-2 py-1 font-medium">Exit type</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          </div>
+                        </thead>
+                        <tbody className="tabular-nums">
+                          {[...trades].sort((a, b) => a.entryTime - b.entryTime).map((trade, index) => {
+                            const open = trade.exit === undefined;
+                            return (
+                              <tr key={trade.id} className="border-t border-white/[0.05] text-slate-400 hover:bg-white/[0.03]">
+                                <td className="px-2 py-1.5 text-slate-600">{index + 1}</td>
+                                <td className="px-2 py-1.5">
+                                  <span className={`inline-flex items-center gap-1 font-semibold ${trade.side === 'long' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {trade.side === 'long' ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
+                                    {trade.side === 'long' ? 'Long' : 'Short'}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-1.5 text-[9px] uppercase tracking-wide text-slate-500">{trade.orderType ?? 'market'}</td>
+                                <td className="px-2 py-1.5 text-slate-300">{fmtPrice(trade.entry, digits)}</td>
+                                <td className="px-2 py-1.5">{open ? <span className="text-amber-400">open</span> : fmtPrice(trade.exit, digits)}</td>
+                                <td className="px-2 py-1.5 text-slate-500">{fmtQty(trade.qty)}</td>
+                                <td className={`px-2 py-1.5 font-semibold ${open ? 'text-slate-600' : (trade.rMultiple ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{open ? '—' : `${fmtSigned(trade.rMultiple, 2)}R`}</td>
+                                <td className={`px-2 py-1.5 font-semibold ${open ? 'text-slate-600' : (trade.pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{open ? '—' : fmtSignedMoney(trade.pnl)}</td>
+                                <td className="px-2 py-1.5 text-slate-500">{trade.entryIndex !== undefined && trade.exitIndex !== undefined ? trade.exitIndex - trade.entryIndex : '—'}</td>
+                                <td className="px-2 py-1.5 text-[9px] uppercase tracking-wide text-slate-500">{open ? 'in progress' : trade.exitReason ?? 'manual'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+
+                {dock === 'statistics' && (
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+                      {metricTiles.map(([label, value, tone]) => (
+                        <div key={label} className="rounded-lg bg-white/[0.04] px-2.5 py-1.5">
+                          <div className="text-[9px] uppercase tracking-wide text-slate-500">{label}</div>
+                          <div className={`mt-0.5 text-[12px] font-semibold tabular-nums ${tone === 'up' ? 'text-emerald-400' : tone === 'down' ? 'text-rose-400' : 'text-slate-200'}`}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="rounded-lg bg-white/[0.03] px-2 pb-1 pt-2">
+                      <div className="mb-1 flex items-center justify-between text-[9px] uppercase tracking-wide text-slate-500">
+                        <span>Equity curve</span>
+                        <span className="tabular-nums text-slate-400">{fmtMoney(equity, 0)}</span>
+                      </div>
+                      <EquityCurve points={stats.equity} start={balance} />
+                    </div>
+                  </div>
+                )}
+
+                {dock === 'distribution' && (
+                  <div className="space-y-1.5">
+                    {stats.count === 0 ? (
+                      <div className="rounded-xl border border-dashed border-white/10 px-3 py-6 text-center text-[11px] text-slate-500">Close a few trades to see how your R multiples are distributed.</div>
+                    ) : (
+                      rBuckets.map((bucket) => (
+                        <div key={bucket.label} className="flex items-center gap-2 text-[10px]">
+                          <span className="w-[74px] shrink-0 text-right text-slate-500">{bucket.label}</span>
+                          <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/[0.05]">
+                            <div
+                              className={`h-full rounded-full ${bucket.label.startsWith('-') || bucket.label.startsWith('≤') ? 'bg-rose-500/70' : 'bg-emerald-500/70'}`}
+                              style={{ width: `${(bucket.count / rMax) * 100}%` }}
+                            />
+                          </div>
+                          <span className="w-6 text-right tabular-nums text-slate-400">{bucket.count}</span>
+                        </div>
+                      ))
+                    )}
+                    {stats.count > 0 && (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-[10px] text-slate-500">
+                        <span>Best <span className="text-emerald-400">{fmtSigned(Math.max(...stats.rValues), 2)}R</span></span>
+                        <span>Worst <span className="text-rose-400">{fmtSigned(Math.min(...stats.rValues), 2)}R</span></span>
+                        <span>Avg <span className="text-slate-300">{fmtSigned(stats.avgR, 2)}R</span></span>
+                        <span>Sample <span className="text-slate-300">{stats.count}</span></span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
         </div>
 
-        {/* ============ order ticket ============ */}
+        {/* ============ right rail ============ */}
         <div className="space-y-4">
+          {/* order ticket */}
           <section className="rounded-2xl bg-white p-4 shadow-[0_2px_14px_rgba(15,23,42,.05)]">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-zinc-900">Risk ticket</h3>
-                <p className="mt-0.5 text-[10px] text-slate-400">Position sizing from your stop, not lot guesswork.</p>
+                <h3 className="text-sm font-semibold text-zinc-900">Order ticket</h3>
+                <p className="mt-0.5 text-[10px] text-slate-400">Size from your stop, then send it to the replay.</p>
               </div>
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500">{market.label}</span>
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500">{shortName(market.label)}/{quoteName(market.label)}</span>
+            </div>
+
+            <div className="bt-light-seg mt-3">
+              {(['market', 'limit'] as OrderKind[]).map((kind) => (
+                <button key={kind} type="button" onClick={() => {
+                  setOrderKind(kind);
+                  if (kind === 'limit' && candle) setLimitPrice(candle.close.toFixed(digits));
+                }} className={orderKind === kind ? 'is-active' : ''}>
+                  {kind === 'market' ? 'Market' : 'Limit'}
+                </button>
+              ))}
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-2">
               <label className="block">
                 <span className="mb-1 block text-[10px] font-medium text-slate-500">Balance ($)</span>
-                <input
-                  type="number"
-                  min={100}
-                  step={100}
-                  value={balance}
-                  onChange={(event) => setBalance(Math.max(100, Number(event.target.value) || 0))}
-                  className="w-full !py-2 !text-xs"
-                />
+                <input type="number" min={100} step={100} value={balance} onChange={(event) => setBalance(Math.max(100, Number(event.target.value) || 0))} className="w-full !py-2 !text-xs" />
               </label>
               <label className="block">
                 <span className="mb-1 block text-[10px] font-medium text-slate-500">Risk / trade (%)</span>
-                <input
-                  type="number"
-                  min={0.1}
-                  max={10}
-                  step={0.1}
-                  value={riskPct}
-                  onChange={(event) => setRiskPct(Math.min(10, Math.max(0.1, Number(event.target.value) || 0.1)))}
-                  className="w-full !py-2 !text-xs"
-                />
+                <input type="number" min={0.1} max={10} step={0.1} value={riskPct} onChange={(event) => setRiskPct(Math.min(10, Math.max(0.1, Number(event.target.value) || 0.1)))} className="w-full !py-2 !text-xs" />
               </label>
               <label className="block">
                 <span className="mb-1 block text-[10px] font-medium text-slate-500">Stop (× ATR)</span>
-                <input
-                  type="number"
-                  min={0.3}
-                  max={6}
-                  step={0.1}
-                  value={stopMult}
-                  onChange={(event) => setStopMult(Math.min(6, Math.max(0.3, Number(event.target.value) || 0.3)))}
-                  className="w-full !py-2 !text-xs"
-                />
+                <input type="number" min={0.3} max={6} step={0.1} value={stopMult} onChange={(event) => setStopMult(Math.min(6, Math.max(0.3, Number(event.target.value) || 0.3)))} className="w-full !py-2 !text-xs" />
               </label>
               <label className="block">
                 <span className="mb-1 block text-[10px] font-medium text-slate-500">Reward (R)</span>
-                <input
-                  type="number"
-                  min={0.5}
-                  max={10}
-                  step={0.5}
-                  value={rewardR}
-                  onChange={(event) => setRewardR(Math.min(10, Math.max(0.5, Number(event.target.value) || 0.5)))}
-                  className="w-full !py-2 !text-xs"
-                />
+                <input type="number" min={0.5} max={10} step={0.5} value={rewardR} onChange={(event) => setRewardR(Math.min(10, Math.max(0.5, Number(event.target.value) || 0.5)))} className="w-full !py-2 !text-xs" />
               </label>
             </div>
 
+            {orderKind === 'limit' && (
+              <label className="mt-2 block">
+                <span className="mb-1 block text-[10px] font-medium text-slate-500">Limit price</span>
+                <input
+                  type="number"
+                  step={10 ** -digits}
+                  value={limitPrice}
+                  onChange={(event) => setLimitPrice(event.target.value)}
+                  className="w-full !py-2 !text-xs tabular-nums"
+                  placeholder={candle ? candle.close.toFixed(digits) : '0'}
+                />
+                <span className="mt-1 block text-[9px] text-slate-400">Rests until price trades through it on the next candles.</span>
+              </label>
+            )}
+
             <div className="mt-3 rounded-2xl bg-[#0c111a] p-3 text-[10px] text-slate-400">
               <div className="flex items-center justify-between">
-                <span>Entry · current close</span>
-                <span className="bt-mono text-sm font-semibold text-white">{candle ? fmtPrice(candle.close, digits) : '—'}</span>
+                <span>{orderKind === 'limit' ? 'Limit entry' : 'Entry · current close'}</span>
+                <span className="bt-mono text-sm font-semibold text-white">{candle ? fmtPrice(entryRef, digits) : '—'}</span>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <div className="rounded-xl bg-white/[0.04] px-2.5 py-2">
                   <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-400"><ArrowUp size={9} /> Long</div>
-                  <div className="mt-1 flex items-center justify-between"><span>Stop</span><span className="bt-mono text-rose-300">{candle && stopDistance ? fmtPrice(candle.close - stopDistance, digits) : '—'}</span></div>
-                  <div className="flex items-center justify-between"><span>Target</span><span className="bt-mono text-emerald-300">{candle && stopDistance ? fmtPrice(candle.close + stopDistance * rewardR, digits) : '—'}</span></div>
+                  <div className="mt-1 flex items-center justify-between"><span>Stop</span><span className="bt-mono text-rose-300">{fmtPrice(longStop, digits)}</span></div>
+                  <div className="flex items-center justify-between"><span>Target</span><span className="bt-mono text-emerald-300">{fmtPrice(longTarget, digits)}</span></div>
                 </div>
                 <div className="rounded-xl bg-white/[0.04] px-2.5 py-2">
                   <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-rose-400"><ArrowDown size={9} /> Short</div>
-                  <div className="mt-1 flex items-center justify-between"><span>Stop</span><span className="bt-mono text-rose-300">{candle && stopDistance ? fmtPrice(candle.close + stopDistance, digits) : '—'}</span></div>
-                  <div className="flex items-center justify-between"><span>Target</span><span className="bt-mono text-emerald-300">{candle && stopDistance ? fmtPrice(candle.close - stopDistance * rewardR, digits) : '—'}</span></div>
+                  <div className="mt-1 flex items-center justify-between"><span>Stop</span><span className="bt-mono text-rose-300">{fmtPrice(shortStop, digits)}</span></div>
+                  <div className="flex items-center justify-between"><span>Target</span><span className="bt-mono text-emerald-300">{fmtPrice(shortTarget, digits)}</span></div>
                 </div>
               </div>
               <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
@@ -806,16 +1276,16 @@ export const BacktestView: React.FC = () => {
             {feedback && <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[10px] text-amber-700">{feedback}</p>}
 
             {active ? (
-              <div className="mt-3">
+              <div className="mt-3 space-y-2">
                 <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">{active.side === 'long' ? 'Long' : 'Short'} open</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">{active.side === 'long' ? 'Long' : 'Short'} open · {fmtQty(active.qty)}</span>
                     <span className={`text-xs font-semibold tabular-nums ${openPnl >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{fmtSignedMoney(openPnl)}</span>
                   </div>
                   <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-amber-200/60">
                     <div
                       className={`h-full rounded-full ${openPnl >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                      style={{ width: `${Math.min(100, Math.max(0, ((candle?.close ?? active.entry) - active.entry) / (active.target - active.entry) * 100))}%` }}
+                      style={{ width: `${Math.min(100, Math.max(0, (((candle?.close ?? active.entry) - active.entry) * (active.side === 'long' ? 1 : -1)) / Math.max(1e-9, Math.abs(active.target - active.entry)) * 100))}%` }}
                     />
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-amber-900/80">
@@ -823,42 +1293,98 @@ export const BacktestView: React.FC = () => {
                     <div className="text-right">Target <span className="bt-mono font-semibold text-emerald-700">{fmtPrice(active.target, digits)}</span></div>
                   </div>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button type="button" onClick={moveToBreakEven} className="rounded-full border border-slate-200 bg-white py-2.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">Break-even</button>
-                  <button type="button" onClick={closeActive} className="flex items-center justify-center gap-1.5 rounded-full bg-black py-2.5 text-[11px] font-semibold text-white hover:bg-zinc-800">
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={moveToBreakEven} className="rounded-full border border-slate-200 bg-white py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">Break-even</button>
+                  <button type="button" onClick={closeHalf} className="rounded-full border border-slate-200 bg-white py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">Close ½</button>
+                  <button type="button" onClick={reversePosition} className="rounded-full border border-slate-200 bg-white py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">Reverse</button>
+                  <button type="button" onClick={closeActive} className="flex items-center justify-center gap-1.5 rounded-full bg-black py-2 text-[11px] font-semibold text-white hover:bg-zinc-800">
                     <Check size={13} /> Close
                   </button>
                 </div>
               </div>
             ) : (
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => openPosition('long')} disabled={!candle || loading} className="bt-long">
-                  <ArrowUp size={14} /> Long
+                <button type="button" onClick={() => (orderKind === 'limit' ? placeLimit('long') : openMarket('long'))} disabled={!candle || loading || ticketBlocked} className="bt-long">
+                  <ArrowUp size={14} /> {orderKind === 'limit' ? 'Buy limit' : 'Long'}
                 </button>
-                <button type="button" onClick={() => openPosition('short')} disabled={!candle || loading} className="bt-short">
-                  <ArrowDown size={14} /> Short
+                <button type="button" onClick={() => (orderKind === 'limit' ? placeLimit('short') : openMarket('short'))} disabled={!candle || loading || ticketBlocked} className="bt-short">
+                  <ArrowDown size={14} /> {orderKind === 'limit' ? 'Sell limit' : 'Short'}
                 </button>
               </div>
             )}
 
+            {orders.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {orders.map((order) => (
+                  <div key={order.id} className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-[10px] text-amber-900">
+                    <span className="font-semibold">{order.side === 'long' ? 'Buy' : 'Sell'} limit @ <span className="bt-mono">{fmtPrice(order.price, digits)}</span></span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-amber-700/70">{fmtQty(order.qty)}</span>
+                      <button type="button" onClick={() => cancelOrder(order.id)} className="rounded p-0.5 text-amber-700 hover:bg-amber-200" title="Cancel order"><X size={12} /></button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <p className="mt-2 text-center text-[9px] text-slate-400">
-              Fills at the current candle close · stop or target settles automatically on the next candles.
+              Market fills at the close · limits fill when price trades through · stop/target settle on later candles.
             </p>
           </section>
 
+          {/* watchlist */}
+          <section className="rounded-2xl bg-white p-3.5 shadow-[0_2px_14px_rgba(15,23,42,.05)]">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Star size={13} className="text-slate-300" />
+                <h3 className="text-xs font-semibold text-zinc-900">Watchlist</h3>
+              </div>
+              <button type="button" onClick={() => { setSearch(''); setModal('symbol'); }} className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Add symbol"><Search size={13} /></button>
+            </div>
+            <div className="space-y-0.5">
+              {watchlist.map((id) => {
+                const item = getMarket(id);
+                const quote = priceFor(id, item.base);
+                const selected = id === marketId;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setMarketId(id)}
+                    className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition ${selected ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
+                  >
+                    <span className="flex min-w-0 flex-col leading-tight">
+                      <span className={`truncate text-[11px] font-semibold ${selected ? 'text-zinc-900' : 'text-slate-700'}`}>{shortName(item.label)}<span className="text-slate-400">/{quoteName(item.label)}</span></span>
+                      <span className="text-[9px] text-slate-400">{item.kind === 'crypto' ? 'Crypto' : 'Practice'}</span>
+                    </span>
+                    <span className="flex shrink-0 flex-col items-end leading-tight">
+                      <span className="text-[11px] font-medium tabular-nums text-slate-700">{fmtPrice(quote.price, item.digits)}</span>
+                      <span className={`text-[9px] tabular-nums ${quote.changePct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{item.binance ? pct(quote.changePct) : 'synthetic'}</span>
+                    </span>
+                  </button>
+                );
+              })}
+              {watchlist.length === 0 && <p className="px-2 py-3 text-[10px] text-slate-400">Empty — use the search button to add markets.</p>}
+            </div>
+            <button type="button" onClick={() => { setSearch(''); setModal('symbol'); }} className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 py-1.5 text-[10px] font-medium text-slate-500 hover:border-slate-300 hover:text-slate-700">
+              <Search size={11} /> Symbol search
+            </button>
+          </section>
+
+          {/* session */}
           <section className="rounded-2xl bg-white p-4 shadow-[0_2px_14px_rgba(15,23,42,.05)]">
             <h3 className="text-sm font-semibold text-zinc-900">Session</h3>
             <dl className="mt-2 space-y-1.5 text-[11px]">
-              <div className="flex justify-between"><dt className="text-slate-500">Source</dt><dd className="max-w-[190px] truncate text-right text-slate-700">{source}</dd></div>
+              <div className="flex justify-between"><dt className="text-slate-500">Source</dt><dd className="max-w-[180px] truncate text-right text-slate-700">{source}</dd></div>
               <div className="flex justify-between"><dt className="text-slate-500">Starting balance</dt><dd className="tabular-nums text-slate-700">{fmtMoney(balance, 0)}</dd></div>
+              <div className="flex justify-between"><dt className="text-slate-500">Equity</dt><dd className="tabular-nums text-slate-700">{fmtMoney(equity, 0)}</dd></div>
               <div className="flex justify-between"><dt className="text-slate-500">Open P&L</dt><dd className={`tabular-nums ${openPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{active ? fmtSignedMoney(openPnl) : '—'}</dd></div>
               <div className="flex justify-between"><dt className="text-slate-500">Win / loss / BE</dt><dd className="tabular-nums text-slate-700">{stats.wins} / {stats.losses} / {stats.breakEven}</dd></div>
-              <div className="flex justify-between"><dt className="text-slate-500">Avg win / loss</dt><dd className="tabular-nums text-slate-700">{fmtMoney(stats.avgWin, 0)} / {fmtMoney(stats.avgLoss, 0)}</dd></div>
               <div className="flex justify-between"><dt className="text-slate-500">Expectancy</dt><dd className="tabular-nums text-slate-700">{fmtSignedMoney(stats.expectancy, 0)} · {fmtSigned(stats.expectancyR, 2)}R</dd></div>
+              <div className="flex justify-between"><dt className="text-slate-500">Drawings</dt><dd className="tabular-nums text-slate-700">{drawings.length}</dd></div>
             </dl>
-            <div className="mt-3 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[10px] text-slate-500">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-slate-400 shadow-inner-soft"><RotateCcw size={11} /></span>
-              Reset the session to clear trades and replay from 35%.
+            <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-[10px] leading-relaxed text-slate-500">
+              <span className="font-semibold text-slate-600">Shortcuts</span> · Space play/pause · ←/→ step · Shift+←/→ ×10 · L/S order · C close · B break-even · F fullscreen · Esc cancel tool.
             </div>
           </section>
         </div>
@@ -868,6 +1394,101 @@ export const BacktestView: React.FC = () => {
         <span className="inline-flex items-center gap-1.5"><Upload size={12} /> CSV: time/date, open, high, low, close (+ optional volume)</span>
         <span>Educational replay only — not financial advice.</span>
       </div>
+
+      {/* ============ symbol modal ============ */}
+      {modal === 'symbol' && (
+        <Modal title="Symbols" subtitle="Crypto uses live Binance history · metals & FX use deterministic practice candles." onClose={() => setModal(null)}>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              autoFocus
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search BTC, ETH, gold, EUR…"
+              className="w-full !py-2.5 !pl-9 !text-xs"
+            />
+          </div>
+          <div className="mt-3 divide-y divide-slate-100">
+            {filteredMarkets.map((item) => {
+              const quote = priceFor(item.id, item.base);
+              const watched = watchlist.includes(item.id);
+              return (
+                <div key={item.id} className="flex items-center gap-3 py-2">
+                  <button type="button" onClick={() => toggleWatch(item.id)} className={`rounded-full p-1.5 ${watched ? 'text-amber-500 hover:bg-amber-50' : 'text-slate-300 hover:bg-slate-100 hover:text-slate-500'}`} title={watched ? 'Remove from watchlist' : 'Add to watchlist'}>
+                    <Star size={14} fill={watched ? 'currentColor' : 'none'} />
+                  </button>
+                  <button type="button" onClick={() => { setMarketId(item.id); setModal(null); }} className="flex flex-1 items-center justify-between gap-3 text-left">
+                    <span className="flex min-w-0 flex-col leading-tight">
+                      <span className="text-xs font-semibold text-zinc-900">{item.label}</span>
+                      <span className="text-[10px] text-slate-400">{item.kind === 'crypto' ? 'Binance spot · live history' : 'Practice feed · synthetic history'}</span>
+                    </span>
+                    <span className="flex shrink-0 flex-col items-end leading-tight">
+                      <span className="text-xs tabular-nums text-slate-700">{fmtPrice(quote.price, item.digits)}</span>
+                      <span className={`text-[10px] tabular-nums ${quote.changePct >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{item.binance ? pct(quote.changePct) : 'synthetic'}</span>
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+            {filteredMarkets.length === 0 && <p className="py-8 text-center text-xs text-slate-400">No symbol matches “{search}”.</p>}
+          </div>
+        </Modal>
+      )}
+
+      {/* ============ indicators modal ============ */}
+      {modal === 'indicators' && (
+        <Modal title="Indicators & studies" subtitle="Toggle studies, tune the lengths — the chart and legend update immediately." onClose={() => setModal(null)} width="max-w-3xl">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">On chart</div>
+              <div className="divide-y divide-slate-100">
+                {OVERLAY_META.map((item) => (
+                  <button key={item.key} type="button" onClick={() => setOverlays((current) => ({ ...current, [item.key]: !current[item.key] }))} className="flex w-full items-center justify-between gap-3 py-2 text-left">
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                      <span className="text-[11px] text-slate-700">{item.label}</span>
+                    </span>
+                    <span className={`flex h-4 w-4 items-center justify-center rounded ${overlays[item.key] ? 'bg-emerald-500 text-white' : 'border border-slate-200 text-transparent'}`}><Check size={11} strokeWidth={3} /></span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-3">
+              {PERIOD_FIELDS.map((group) => (
+                <div key={group.group}>
+                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{group.group}</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {group.fields.map((field) => (
+                      <label key={field.key} className="block">
+                        <span className="mb-0.5 block text-[10px] text-slate-500">{field.label}</span>
+                        <input
+                          type="number"
+                          min={field.min}
+                          max={field.max}
+                          step={field.step}
+                          value={periods[field.key]}
+                          onChange={(event) => {
+                            const raw = Number(event.target.value);
+                            const next = Number.isFinite(raw) ? Math.min(field.max, Math.max(field.min, raw)) : field.min;
+                            setPeriods((current) => ({ ...current, [field.key]: next }));
+                          }}
+                          className="w-full !py-1.5 !text-xs tabular-nums"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                <button type="button" onClick={() => setPeriods({ ...DEFAULT_PERIODS })} className="text-[10px] font-medium text-slate-500 hover:text-slate-800">Reset defaults</button>
+                <button type="button" onClick={() => setModal(null)} className="rounded-full bg-black px-4 py-2 text-[11px] font-semibold text-white hover:bg-zinc-800">Done</button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
+
+const Circle: React.FC = () => <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/70" />;
