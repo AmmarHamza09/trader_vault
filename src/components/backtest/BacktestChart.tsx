@@ -112,14 +112,17 @@ type ChartProps = {
 /*  Palette                                                            */
 /* ------------------------------------------------------------------ */
 
-const UP = '#22c98a';
-const DOWN = '#f05b70';
-const GRID = 'rgba(148,163,184,0.07)';
-const BORDER = 'rgba(148,163,184,0.12)';
-const EMA_COLORS = ['#38bdf8', '#f59e0b', '#a78bfa', '#f472b6'];
-const DRAW_COLOR = '#dbe3ee';
-const MEASURE_COLOR = '#38bdf8';
-const FIB_COLOR = '#f59e0b';
+/* TradingView dark palette */
+const UP = '#26a69a';
+const DOWN = '#ef5350';
+const GRID = '#1e222d';
+const BORDER = '#2a2e39';
+const TEXT = '#d1d4dc';
+const ACCENT = '#2962ff';
+const EMA_COLORS = ['#2962ff', '#ff9800', '#e91e63', '#9c27b0'];
+const DRAW_COLOR = '#2962ff';
+const MEASURE_COLOR = '#2962ff';
+const FIB_COLOR = '#2962ff';
 
 type PriceSeries = ISeriesApi<'Candlestick'> | ISeriesApi<'Bar'> | ISeriesApi<'Line'> | ISeriesApi<'Area'>;
 
@@ -172,6 +175,7 @@ export const BacktestChart: React.FC<ChartProps> = ({
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [draft, setDraft] = useState<Drawing | null>(null);
   const [tick, setTick] = useState(0);
+  const [paneTops, setPaneTops] = useState<number[]>([]);
   const dataRef = useRef<{ candles: Candle[]; cursor: number }>({ candles, cursor });
   const typeRef = useRef(chartType);
   dataRef.current = { candles, cursor };
@@ -194,6 +198,26 @@ export const BacktestChart: React.FC<ChartProps> = ({
     if (!panes.length) return;
     panes[0].setStretchFactor(panes.length > 1 ? 3.6 : 1);
     for (let index = 1; index < panes.length; index += 1) panes[index].setStretchFactor(1);
+    measurePanes();
+  };
+
+  /** Track each study pane's top offset so legends can sit inside them. */
+  const measurePanes = (attempt = 0) => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const heights = chart.panes().map((pane) => pane.getHeight());
+    // Panes that were just added report 0 until the chart has laid them out.
+    if (heights.some((height) => !(height > 0))) {
+      if (attempt < 8) window.requestAnimationFrame(() => measurePanes(attempt + 1));
+      return;
+    }
+    let offset = 0;
+    const tops = heights.map((height) => {
+      const top = offset;
+      offset += height + 1;
+      return top;
+    });
+    setPaneTops((previous) => (previous.length === tops.length && previous.every((value, index) => value === tops[index]) ? previous : tops));
   };
 
   /* ---------- create chart once ---------- */
@@ -206,20 +230,24 @@ export const BacktestChart: React.FC<ChartProps> = ({
       width: host.clientWidth,
       height: host.clientHeight,
       layout: {
-        background: { type: ColorType.Solid, color: '#0c111a' },
-        textColor: '#94a3b8',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+        background: { type: ColorType.Solid, color: '#131722' },
+        textColor: TEXT,
+        fontFamily: '"Trebuchet MS", Roboto, Ubuntu, -apple-system, sans-serif',
         fontSize: 11,
         attributionLogo: false,
       },
       grid: { vertLines: { color: GRID }, horzLines: { color: GRID } },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: 'rgba(148,163,184,.28)', labelBackgroundColor: '#1e293b' },
-        horzLine: { color: 'rgba(148,163,184,.28)', labelBackgroundColor: '#1e293b' },
+        vertLine: { color: '#758696', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#363a45' },
+        horzLine: { color: '#758696', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#363a45' },
       },
-      rightPriceScale: { borderColor: BORDER, scaleMargins: { top: 0.08, bottom: 0.24 } },
-      timeScale: { borderColor: BORDER, timeVisible: true, secondsVisible: false, rightOffset: 6 },
+      rightPriceScale: {
+        borderColor: BORDER,
+        scaleMargins: { top: 0.08, bottom: 0.24 },
+        entireTextOnly: true,
+      },
+      timeScale: { borderColor: BORDER, timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
       localization: {
         priceFormatter: (value: number) => value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits }),
       },
@@ -243,7 +271,7 @@ export const BacktestChart: React.FC<ChartProps> = ({
       visible: false,
     });
     const lineSeries = chart.addSeries(LineSeries, {
-      color: '#dbe3ee',
+      color: ACCENT,
       lineWidth: 2,
       priceFormat,
       visible: false,
@@ -251,9 +279,9 @@ export const BacktestChart: React.FC<ChartProps> = ({
       priceLineVisible: false,
     });
     const areaSeries = chart.addSeries(AreaSeries, {
-      lineColor: '#38bdf8',
-      topColor: 'rgba(56,189,248,.28)',
-      bottomColor: 'rgba(56,189,248,.02)',
+      lineColor: ACCENT,
+      topColor: 'rgba(41,98,255,.26)',
+      bottomColor: 'rgba(41,98,255,.02)',
       lineWidth: 2,
       priceFormat,
       visible: false,
@@ -272,10 +300,10 @@ export const BacktestChart: React.FC<ChartProps> = ({
     const ema = EMA_COLORS.map((color, index) =>
       chart.addSeries(LineSeries, { ...lineBase, color, lineWidth: 2 as const, title: `EMA ${index + 1}` }),
     );
-    const vwap = chart.addSeries(LineSeries, { ...lineBase, color: '#22d3ee', lineWidth: 2, lineStyle: LineStyle.Dashed, title: 'VWAP' });
-    const bbUpper = chart.addSeries(LineSeries, { ...lineBase, color: 'rgba(148,163,184,.55)', lineWidth: 1, lineStyle: LineStyle.Dashed, title: 'BB upper' });
-    const bbMiddle = chart.addSeries(LineSeries, { ...lineBase, color: 'rgba(148,163,184,.35)', lineWidth: 1, title: 'BB basis' });
-    const bbLower = chart.addSeries(LineSeries, { ...lineBase, color: 'rgba(148,163,184,.55)', lineWidth: 1, lineStyle: LineStyle.Dashed, title: 'BB lower' });
+    const vwap = chart.addSeries(LineSeries, { ...lineBase, color: '#00bcd4', lineWidth: 2, lineStyle: LineStyle.Dashed, title: 'VWAP' });
+    const bbUpper = chart.addSeries(LineSeries, { ...lineBase, color: 'rgba(120,123,134,.75)', lineWidth: 1, lineStyle: LineStyle.Dashed, title: 'BB upper' });
+    const bbMiddle = chart.addSeries(LineSeries, { ...lineBase, color: 'rgba(120,123,134,.55)', lineWidth: 1, title: 'BB basis' });
+    const bbLower = chart.addSeries(LineSeries, { ...lineBase, color: 'rgba(120,123,134,.75)', lineWidth: 1, lineStyle: LineStyle.Dashed, title: 'BB lower' });
 
     seriesRef.current = {
       candles: candleSeries,
@@ -397,11 +425,11 @@ export const BacktestChart: React.FC<ChartProps> = ({
       const index = pane.paneIndex();
       const rsi = chart.addSeries(
         LineSeries,
-        { color: '#c084fc', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 0, minMove: 1 } },
+        { color: '#7e57c2', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 0, minMove: 1 } },
         index,
       );
-      rsi.createPriceLine({ price: 70, color: 'rgba(240,91,112,.45)', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' });
-      rsi.createPriceLine({ price: 30, color: 'rgba(34,201,138,.45)', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' });
+      rsi.createPriceLine({ price: 70, color: '#787b86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '70' });
+      rsi.createPriceLine({ price: 30, color: '#787b86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '30' });
       bag.rsi = rsi;
     }
     if (overlays.macd) {
@@ -414,15 +442,15 @@ export const BacktestChart: React.FC<ChartProps> = ({
       );
       const line = chart.addSeries(
         LineSeries,
-        { color: '#38bdf8', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } },
+        { color: '#2962ff', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } },
         index,
       );
       const signal = chart.addSeries(
         LineSeries,
-        { color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } },
+        { color: '#ff6d00', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } },
         index,
       );
-      line.createPriceLine({ price: 0, color: 'rgba(148,163,184,.35)', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
+      line.createPriceLine({ price: 0, color: 'rgba(120,123,134,.45)', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
       bag.macdHist = hist;
       bag.macdLine = line;
       bag.macdSignal = signal;
@@ -432,16 +460,16 @@ export const BacktestChart: React.FC<ChartProps> = ({
       const index = pane.paneIndex();
       const k = chart.addSeries(
         LineSeries,
-        { color: '#38bdf8', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 0, minMove: 1 } },
+        { color: '#2962ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 0, minMove: 1 } },
         index,
       );
       const d = chart.addSeries(
         LineSeries,
-        { color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 0, minMove: 1 } },
+        { color: '#ff6d00', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'price', precision: 0, minMove: 1 } },
         index,
       );
-      k.createPriceLine({ price: 80, color: 'rgba(240,91,112,.4)', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' });
-      k.createPriceLine({ price: 20, color: 'rgba(34,201,138,.4)', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' });
+      k.createPriceLine({ price: 80, color: '#787b86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '80' });
+      k.createPriceLine({ price: 20, color: '#787b86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '20' });
       bag.stochK = k;
       bag.stochD = d;
     }
@@ -471,7 +499,7 @@ export const BacktestChart: React.FC<ChartProps> = ({
         visible.flatMap((candle, index) => {
           const value = macd.histogram[index];
           if (value === null || !Number.isFinite(value)) return [];
-          return [{ time: candle.time, value, color: value >= 0 ? 'rgba(34,201,138,.45)' : 'rgba(240,91,112,.45)' }];
+          return [{ time: candle.time, value, color: value >= 0 ? 'rgba(38,166,154,.5)' : 'rgba(239,83,80,.5)' }];
         }),
       );
     }
@@ -500,7 +528,7 @@ export const BacktestChart: React.FC<ChartProps> = ({
       visible.map((candle) => ({
         time: candle.time,
         value: candle.volume,
-        color: candle.close >= candle.open ? 'rgba(34,201,138,.32)' : 'rgba(240,91,112,.32)',
+        color: candle.close >= candle.open ? 'rgba(38,166,154,.45)' : 'rgba(239,83,80,.45)',
       })),
     );
     bag.ema[0].setData(toLine(visible, emaSeries(visible, periods.ema1)));
@@ -553,13 +581,13 @@ export const BacktestChart: React.FC<ChartProps> = ({
     const levels: { price: number; color: string; title: string; style: LineStyle }[] = [];
     if (position) {
       levels.push(
-        { price: position.entry, color: 'rgba(226,232,240,.75)', title: 'Entry', style: LineStyle.Dotted },
+        { price: position.entry, color: '#2962ff', title: 'Entry', style: LineStyle.Dotted },
         { price: position.stop, color: DOWN, title: 'Stop', style: LineStyle.Dashed },
         { price: position.target, color: UP, title: 'Target', style: LineStyle.Dashed },
       );
     }
     orders.forEach((order) =>
-      levels.push({ price: order.price, color: '#f59e0b', title: `${order.side === 'long' ? 'Buy' : 'Sell'} limit`, style: LineStyle.Dotted }),
+      levels.push({ price: order.price, color: '#2962ff', title: `${order.side === 'long' ? 'Buy' : 'Sell'} limit`, style: LineStyle.Dotted }),
     );
     if (!levels.length) return;
 
@@ -710,8 +738,8 @@ export const BacktestChart: React.FC<ChartProps> = ({
       return (
         <g key={drawing.id}>
           <line x1={0} x2={plotWidth} y1={Number(y)} y2={Number(y)} stroke={DRAW_COLOR} strokeWidth={1} strokeDasharray="6 4" />
-          <rect x={Math.max(4, plotWidth - 74)} y={Number(y) - 9} width={70} height={18} rx={3} fill="#1e293b" stroke="rgba(148,163,184,.35)" />
-          <text x={Math.max(4, plotWidth - 74) + 35} y={Number(y) + 4} textAnchor="middle" fill="#e2e8f0" fontSize={10} fontFamily="ui-monospace, monospace">
+          <rect x={Math.max(4, plotWidth - 74)} y={Number(y) - 9} width={70} height={18} rx={2} fill="#363a45" stroke="#2a2e39" />
+          <text x={Math.max(4, plotWidth - 74) + 35} y={Number(y) + 4} textAnchor="middle" fill="#d1d4dc" fontSize={10} fontFamily='"Trebuchet MS", Roboto, Ubuntu, sans-serif'>
             {priceLabel(drawing.price)}
           </text>
         </g>
@@ -739,8 +767,8 @@ export const BacktestChart: React.FC<ChartProps> = ({
           <rect x={x} y={y} width={width} height={height} fill={color} fillOpacity={0.1} stroke={color} strokeWidth={1} strokeDasharray={drawing.type === 'measure' ? '5 4' : undefined} />
           {label && (
             <g>
-              <rect x={labelX} y={b.y - 24} width={labelWidth} height={18} rx={3} fill="#0f172a" stroke={color} strokeOpacity={0.6} />
-              <text x={labelX + 7} y={b.y - 11} fill={color} fontSize={10} fontFamily="ui-monospace, monospace">{label}</text>
+              <rect x={labelX} y={b.y - 24} width={labelWidth} height={18} rx={2} fill="#363a45" stroke={color} strokeOpacity={0.6} />
+              <text x={labelX + 7} y={b.y - 11} fill="#d1d4dc" fontSize={10} fontFamily='"Trebuchet MS", Roboto, Ubuntu, sans-serif'>{label}</text>
             </g>
           )}
         </g>
@@ -759,7 +787,7 @@ export const BacktestChart: React.FC<ChartProps> = ({
             return (
               <g key={level}>
                 <line x1={x1} x2={plotWidth} y1={Number(y)} y2={Number(y)} stroke={color} strokeWidth={1} strokeOpacity={level === 0 || level === 1 ? 0.9 : 0.55} />
-                <text x={x1 + 4} y={Number(y) - 3} fill={color} fontSize={9} fontFamily="ui-monospace, monospace">
+                <text x={x1 + 4} y={Number(y) - 3} fill="#d1d4dc" fontSize={9} fontFamily='"Trebuchet MS", Roboto, Ubuntu, sans-serif'>
                   {level.toFixed(3)} · {priceLabel(price)}
                 </text>
               </g>
@@ -790,6 +818,49 @@ export const BacktestChart: React.FC<ChartProps> = ({
 
   const draftVisible = draft && draft.type !== 'hline' ? draft : null;
 
+  /* ---------- study pane legends ---------- */
+  const studyLegends = useMemo(() => {
+    const visible = candles.slice(0, cursor + 1);
+    const lastOf = (series: (number | null)[]) => {
+      for (let index = series.length - 1; index >= 0; index -= 1) if (series[index] !== null) return series[index] as number;
+      return null;
+    };
+    const rows: { key: string; label: string; values: { text: string; color?: string }[]; color: string }[] = [];
+    if (overlays.rsi) {
+      rows.push({
+        key: 'rsi',
+        label: `RSI ${periods.rsiLength}`,
+        values: [{ text: (lastOf(rsiSeries(visible, periods.rsiLength)) ?? NaN).toFixed(2) }],
+        color: '#7e57c2',
+      });
+    }
+    if (overlays.macd) {
+      const macd = macdSeries(visible, periods.macdFast, periods.macdSlow, periods.macdSignal);
+      rows.push({
+        key: 'macd',
+        label: `MACD ${periods.macdFast} ${periods.macdSlow} ${periods.macdSignal}`,
+        values: [
+          { text: (lastOf(macd.macd) ?? NaN).toFixed(2), color: '#2962ff' },
+          { text: (lastOf(macd.signal) ?? NaN).toFixed(2), color: '#ff6d00' },
+        ],
+        color: '#2962ff',
+      });
+    }
+    if (overlays.stoch) {
+      const stoch = stochRsiSeries(visible, periods.rsiLength, periods.stochLength, periods.stochK, periods.stochD);
+      rows.push({
+        key: 'stoch',
+        label: `Stoch RSI ${periods.stochLength} ${periods.stochK} ${periods.stochD}`,
+        values: [
+          { text: (lastOf(stoch.k) ?? NaN).toFixed(2), color: '#2962ff' },
+          { text: (lastOf(stoch.d) ?? NaN).toFixed(2), color: '#ff6d00' },
+        ],
+        color: '#2962ff',
+      });
+    }
+    return rows;
+  }, [candles, cursor, overlays.rsi, overlays.macd, overlays.stoch, periods]);
+
   /* ---------- cursor label ---------- */
   const overlayActive = tool !== 'cursor' && tool !== 'crosshair';
 
@@ -808,8 +879,22 @@ export const BacktestChart: React.FC<ChartProps> = ({
           {drawings.map(renderDrawing)}
           {draftVisible && renderDrawing(draftVisible)}
         </svg>
+        {studyLegends.map((row, index) => {
+          const top = paneTops[index + 1];
+          if (top === undefined) return null;
+          return (
+            <div key={row.key} className="pointer-events-none absolute left-3 z-20 flex items-center gap-1.5 text-[10px] leading-none" style={{ top: top + 5 }}>
+              <span className="h-[2px] w-3 rounded-full" style={{ backgroundColor: row.color }} />
+              <span className="text-[#d1d4dc]">{row.label}</span>
+              {row.values.map((value, valueIndex) => (
+                <span key={valueIndex} style={{ color: value.color ?? '#d1d4dc' }} className="tabular-nums">{value.text}</span>
+              ))}
+            </div>
+          );
+        })}
+
         {overlayActive && (
-          <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full border border-white/10 bg-[#101722]/90 px-3 py-1 text-[10px] text-slate-300 backdrop-blur">
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded border border-[#2a2e39] bg-[#1e222d]/95 px-3 py-1 text-[10px] text-[#d1d4dc] shadow-lg">
             {tool === 'eraser'
               ? 'Click a drawing to remove it'
               : tool === 'hline'

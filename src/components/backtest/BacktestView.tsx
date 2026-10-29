@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, AreaChart, ArrowDown, ArrowUp, BarChart3, Camera, CandlestickChart, Check, ChevronDown,
-  ChevronLeft, ChevronRight, Crosshair, Download, Eraser, Gauge, Layers, LineChart, Loader2, Magnet,
-  Maximize2, Minimize2, Minus, MousePointer2, Pause, Pencil, Play, RotateCcw, Ruler, Search, Settings2,
-  SkipBack, SkipForward, SlidersHorizontal, Square, Star, Target, Trash2, TrendingDown, TrendingUp, Upload, X,
+  ChevronLeft, ChevronRight, Crosshair, Download, Eraser, FunctionSquare, Gauge, Layers, LineChart, Loader2, Magnet,
+  Maximize2, Minimize2, Minus, MousePointer2, Pause, Pencil, Play, Redo2, RotateCcw, Ruler, Search, Settings2,
+  SkipBack, SkipForward, Square, Star, Target, Trash2, TrendingDown, TrendingUp, Undo2, Upload, X,
 } from 'lucide-react';
 import {
   BacktestChart,
@@ -88,16 +88,16 @@ const DEFAULT_SETTINGS: ChartSettings = { grid: true, logScale: false, lastPrice
 const DEFAULT_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XAUUSD', 'EURUSD'];
 
 const OVERLAY_META: { key: keyof ChartOverlays; label: string; color: string; hint: string }[] = [
-  { key: 'ema1', label: 'EMA · fast', color: '#38bdf8', hint: 'EMA 1' },
-  { key: 'ema2', label: 'EMA · slow', color: '#f59e0b', hint: 'EMA 2' },
-  { key: 'ema3', label: 'EMA · trend', color: '#a78bfa', hint: 'EMA 3' },
-  { key: 'ema4', label: 'EMA · long', color: '#f472b6', hint: 'EMA 4' },
-  { key: 'vwap', label: 'VWAP (session)', color: '#22d3ee', hint: 'VWAP' },
-  { key: 'bollinger', label: 'Bollinger Bands', color: '#94a3b8', hint: 'BB' },
-  { key: 'volume', label: 'Volume', color: '#64748b', hint: 'Volume' },
-  { key: 'rsi', label: 'RSI pane', color: '#c084fc', hint: 'RSI' },
-  { key: 'macd', label: 'MACD pane', color: '#38bdf8', hint: 'MACD' },
-  { key: 'stoch', label: 'Stochastic RSI pane', color: '#f59e0b', hint: 'Stoch RSI' },
+  { key: 'ema1', label: 'EMA · fast', color: '#2962ff', hint: 'EMA 1' },
+  { key: 'ema2', label: 'EMA · slow', color: '#ff9800', hint: 'EMA 2' },
+  { key: 'ema3', label: 'EMA · trend', color: '#e91e63', hint: 'EMA 3' },
+  { key: 'ema4', label: 'EMA · long', color: '#9c27b0', hint: 'EMA 4' },
+  { key: 'vwap', label: 'VWAP (session)', color: '#00bcd4', hint: 'VWAP' },
+  { key: 'bollinger', label: 'Bollinger Bands', color: '#787b86', hint: 'BB' },
+  { key: 'volume', label: 'Volume', color: '#787b86', hint: 'Volume' },
+  { key: 'rsi', label: 'RSI pane', color: '#7e57c2', hint: 'RSI' },
+  { key: 'macd', label: 'MACD pane', color: '#2962ff', hint: 'MACD' },
+  { key: 'stoch', label: 'Stochastic RSI pane', color: '#ff6d00', hint: 'Stoch RSI' },
 ];
 
 const PERIOD_FIELDS: { group: string; fields: { key: keyof IndicatorPeriods; label: string; min: number; max: number; step: number }[] }[] = [
@@ -202,7 +202,7 @@ const EquityCurve: React.FC<{ points: { x: number; value: number }[]; start: num
   const area = `${line} L${coords[coords.length - 1].x.toFixed(1)},${height - pad} L${coords[0].x.toFixed(1)},${height - pad} Z`;
   const last = points[points.length - 1]?.value ?? start;
   const up = last >= start;
-  const stroke = up ? '#34d399' : '#fb7185';
+  const stroke = up ? '#26a69a' : '#ef5350';
   const gradientId = up ? 'bt-equity-up' : 'bt-equity-down';
 
   return (
@@ -213,7 +213,7 @@ const EquityCurve: React.FC<{ points: { x: number; value: number }[]; start: num
           <stop offset="100%" stopColor={stroke} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <line x1={pad} x2={width - pad} y1={toY(start)} y2={toY(start)} stroke="rgba(148,163,184,.35)" strokeDasharray="3 4" strokeWidth="1" />
+      <line x1={pad} x2={width - pad} y1={toY(start)} y2={toY(start)} stroke="rgba(120,123,134,.4)" strokeDasharray="3 4" strokeWidth="1" />
       <path d={area} fill={`url(#${gradientId})`} />
       <path d={line} fill="none" stroke={stroke} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
       <circle cx={coords[coords.length - 1].x} cy={coords[coords.length - 1].y} r="2.6" fill={stroke} />
@@ -272,6 +272,37 @@ export const BacktestView: React.FC = () => {
   const [magnet, setMagnet] = useState(prefs.magnet ?? true);
   const [tool, setTool] = useState<DrawingTool>('cursor');
   const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [redoDrawings, setRedoDrawings] = useState<Drawing[]>([]);
+
+  /* ---------- drawing history (TradingView-style undo / redo) ---------- */
+  const addDrawing = useCallback((drawing: Drawing) => {
+    setDrawings((current) => [...current, drawing]);
+    setRedoDrawings([]);
+  }, []);
+
+  const deleteDrawing = useCallback((id: string) => {
+    setDrawings((current) => current.filter((item) => item.id !== id));
+    setRedoDrawings([]);
+  }, []);
+
+  const undoDrawing = useCallback(() => {
+    if (!drawings.length) return;
+    const last = drawings[drawings.length - 1];
+    setDrawings(drawings.slice(0, -1));
+    setRedoDrawings((stack) => [...stack, last]);
+  }, [drawings]);
+
+  const redoDrawing = useCallback(() => {
+    if (!redoDrawings.length) return;
+    const last = redoDrawings[redoDrawings.length - 1];
+    setRedoDrawings(redoDrawings.slice(0, -1));
+    setDrawings((current) => [...current, last]);
+  }, [redoDrawings]);
+
+  const clearDrawings = useCallback(() => {
+    setDrawings([]);
+    setRedoDrawings([]);
+  }, []);
 
   const [dock, setDock] = useState<DockTab>(prefs.dock ?? 'executions');
   const [zen, setZen] = useState(false);
@@ -354,6 +385,7 @@ export const BacktestView: React.FC = () => {
     setCursor(start);
     setSession({ trades: [], orders: [] });
     setDrawings([]);
+    setRedoDrawings([]);
     setPlaying(false);
     setFeedback('');
     setSource(label);
@@ -599,7 +631,11 @@ export const BacktestView: React.FC = () => {
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       const key = event.key.toLowerCase();
-      if (event.key === 'Escape') {
+      if ((event.ctrlKey || event.metaKey) && (key === 'z' || key === 'y')) {
+        event.preventDefault();
+        if (key === 'y' || event.shiftKey) redoDrawing();
+        else undoDrawing();
+      } else if (event.key === 'Escape') {
         setMenu(null);
         setModal(null);
         setZen(false);
@@ -631,7 +667,7 @@ export const BacktestView: React.FC = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [advanceTo, openMarket, placeLimit, closeActive, moveToBreakEven, togglePlay, orderKind]);
+  }, [advanceTo, openMarket, placeLimit, closeActive, moveToBreakEven, togglePlay, orderKind, undoDrawing, redoDrawing]);
 
   /* ---------- dropdown dismissal ---------- */
   useEffect(() => {
@@ -716,6 +752,7 @@ export const BacktestView: React.FC = () => {
   const resetSession = () => {
     setSession({ trades: [], orders: [] });
     setDrawings([]);
+    setRedoDrawings([]);
     setPlaying(false);
     setFeedback('');
     const start = Math.max(1, Math.min(candles.length - 2, Math.floor(candles.length * 0.35)));
@@ -845,85 +882,92 @@ export const BacktestView: React.FC = () => {
       {/* ============ terminal ============ */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
-          <section className={`bt-terminal overflow-hidden rounded-[24px] bg-[#0c111a] shadow-[0_12px_36px_rgba(15,23,42,.12)] ${zen ? 'bt-zen' : ''}`}>
+          <section className={`bt-terminal overflow-hidden rounded-lg bg-[#131722] shadow-[0_12px_36px_rgba(15,23,42,.18)] ${zen ? 'bt-zen' : ''}`}>
             {/* toolbar */}
-            <div className="bt-topbar flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.07] px-2.5 py-2 sm:px-3">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button type="button" onClick={() => setModal('symbol')} className="bt-symbol" title="Search symbols (watchlist)">
-                  <span className="flex flex-col items-start leading-none">
-                    <span className="text-[13px] font-bold text-white">{shortName(market.label)}<span className="text-slate-500">/{quoteName(market.label)}</span></span>
-                    <span className="mt-1 text-[9px] font-medium uppercase tracking-wide text-slate-500">{market.kind === 'crypto' ? 'Binance spot' : 'Practice feed'}</span>
-                  </span>
-                  <ChevronDown size={13} className="text-slate-500" />
-                </button>
+            <div className="bt-topbar flex flex-wrap items-center gap-0.5 border-b border-[#2a2e39] px-1.5 py-1 sm:px-2">
+              <button type="button" onClick={() => setModal('symbol')} className="bt-symbol" title={`Search symbols (watchlist) — ${source}`}>
+                <span className="text-[13px] font-semibold leading-none text-[#d1d4dc]">{shortName(market.label)}<span className="text-[#787b86]">/{quoteName(market.label)}</span></span>
+                <span className="hidden text-[11px] text-[#787b86] sm:inline">·</span>
+                <span className="hidden text-[10px] font-medium uppercase tracking-wide text-[#787b86] sm:inline">{market.kind === 'crypto' ? 'BINANCE' : 'PRACTICE'}</span>
+                <ChevronDown size={12} className="text-[#787b86]" />
+              </button>
 
-                <div className="bt-seg">
-                  {TIMEFRAMES.map((frame) => (
-                    <button key={frame.id} type="button" onClick={() => setTimeframe(frame.id)} className={`bt-seg-btn ${timeframe === frame.id ? 'is-active' : ''}`}>
-                      {frame.label}
-                    </button>
-                  ))}
-                </div>
+              <span className="bt-topbar-sep" />
 
-                <div className="relative">
-                  <button type="button" onClick={() => setMenu((value) => (value === 'chart' ? null : 'chart'))} className={`bt-tool ${menu === 'chart' ? 'is-active' : ''}`} title="Chart type">
-                    {(() => {
-                      const Icon = CHART_TYPES.find((item) => item.id === chartType)?.icon ?? CandlestickChart;
-                      return <Icon size={13} />;
-                    })()}
-                    <span className="hidden sm:inline">{CHART_TYPES.find((item) => item.id === chartType)?.label}</span>
-                    <ChevronDown size={11} />
+              <div className="bt-intervals">
+                {TIMEFRAMES.map((frame) => (
+                  <button key={frame.id} type="button" onClick={() => setTimeframe(frame.id)} className={`bt-interval ${timeframe === frame.id ? 'is-active' : ''}`}>
+                    {frame.label}
                   </button>
-                  {menu === 'chart' && (
-                    <div className="bt-menu left-0">
-                      {CHART_TYPES.map((item) => (
-                        <button key={item.id} type="button" onClick={() => { setChartType(item.id); setMenu(null); }} className={`bt-menu-item ${chartType === item.id ? 'is-active' : ''}`}>
-                          <item.icon size={13} /> <span className="flex-1 text-left">{item.label}</span>
-                          {chartType === item.id && <Check size={12} />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                ))}
+              </div>
 
-                <button type="button" onClick={() => setModal('indicators')} className="bt-tool" title="Indicators & studies">
-                  <SlidersHorizontal size={13} /> <span className="hidden sm:inline">Indicators</span>
+              <span className="bt-topbar-sep" />
+
+              <div className="relative">
+                <button type="button" onClick={() => setMenu((value) => (value === 'chart' ? null : 'chart'))} className={`bt-icon-btn ${menu === 'chart' ? 'is-active' : ''}`} title="Chart type">
+                  {(() => {
+                    const Icon = CHART_TYPES.find((item) => item.id === chartType)?.icon ?? CandlestickChart;
+                    return <Icon size={16} />;
+                  })()}
+                  <ChevronDown size={10} />
                 </button>
+                {menu === 'chart' && (
+                  <div className="bt-menu left-0 w-48">
+                    {CHART_TYPES.map((item) => (
+                      <button key={item.id} type="button" onClick={() => { setChartType(item.id); setMenu(null); }} className={`bt-menu-item ${chartType === item.id ? 'is-active' : ''}`}>
+                        <item.icon size={13} /> <span className="flex-1 text-left">{item.label}</span>
+                        {chartType === item.id && <Check size={12} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button type="button" onClick={() => setModal('indicators')} className="bt-icon-btn" title="Indicators & studies">
+                <FunctionSquare size={15} /> <span className="hidden md:inline">Indicators</span>
+              </button>
+
+              <button type="button" onClick={togglePlay} className={`bt-icon-btn ${playing ? 'is-active' : ''}`} title="Replay / pause (Space)">
+                <Play size={13} fill="currentColor" /> <span className="hidden md:inline">{playing ? 'Pause' : 'Replay'}</span>
+              </button>
+
+              <div className="ml-auto flex min-w-0 items-center gap-0.5">
+                {loading ? (
+                  <span className="inline-flex items-center gap-1.5 px-2 text-[10px] text-[#787b86]"><Loader2 size={12} className="animate-spin" /> loading…</span>
+                ) : null}
+                <button type="button" onClick={undoDrawing} disabled={!drawings.length} className="bt-icon-btn" title="Undo drawing (Ctrl+Z)"><Undo2 size={15} /></button>
+                <button type="button" onClick={redoDrawing} disabled={!redoDrawings.length} className="bt-icon-btn" title="Redo drawing (Ctrl+Shift+Z)"><Redo2 size={15} /></button>
+
+                <span className="bt-topbar-sep" />
 
                 <div className="relative">
-                  <button type="button" onClick={() => setMenu((value) => (value === 'settings' ? null : 'settings'))} className={`bt-tool ${menu === 'settings' ? 'is-active' : ''}`} title="Chart settings">
-                    <Settings2 size={13} /> <span className="hidden lg:inline">Chart</span>
+                  <button type="button" onClick={() => setMenu((value) => (value === 'settings' ? null : 'settings'))} className={`bt-icon-btn ${menu === 'settings' ? 'is-active' : ''}`} title="Chart settings">
+                    <Settings2 size={15} />
                   </button>
                   {menu === 'settings' && (
-                    <div className="bt-menu left-0 w-56">
-                      <div className="px-2 pb-1 pt-1 text-[9px] font-semibold uppercase tracking-wide text-slate-500">Canvas</div>
+                    <div className="bt-menu right-0 w-56">
+                      <div className="px-2 pb-1 pt-1 text-[9px] font-semibold uppercase tracking-wide text-[#787b86]">Canvas</div>
                       {([
                         ['grid', 'Show grid'],
                         ['logScale', 'Logarithmic scale'],
                         ['lastPriceLine', 'Last price line'],
                       ] as [keyof ChartSettings, string][]).map(([key, label]) => (
                         <button key={key} type="button" onClick={() => setSettings((current) => ({ ...current, [key]: !current[key] }))} className="bt-menu-item">
-                          <span className={`flex h-3.5 w-3.5 items-center justify-center rounded ${settings[key] ? 'bg-emerald-400 text-[#0c111a]' : 'border border-white/20 text-transparent'}`}><Check size={9} strokeWidth={3} /></span>
+                          <span className={`flex h-3.5 w-3.5 items-center justify-center rounded-sm ${settings[key] ? 'bg-[#2962ff] text-white' : 'border border-[#4a4e59] text-transparent'}`}><Check size={9} strokeWidth={3} /></span>
                           <span className="flex-1 text-left">{label}</span>
                         </button>
                       ))}
-                      <div className="my-1 border-t border-white/10" />
+                      <div className="my-1 border-t border-[#2a2e39]" />
+                      <button type="button" onClick={() => { jumpTo(1); setMenu(null); }} className="bt-menu-item"><ChevronRight size={12} /><span className="flex-1 text-left">Jump to latest candle</span></button>
                       <button type="button" onClick={() => setSettings({ ...DEFAULT_SETTINGS })} className="bt-menu-item"><RotateCcw size={12} /><span className="flex-1 text-left">Reset chart settings</span></button>
                     </div>
                   )}
                 </div>
-              </div>
 
-              <div className="flex min-w-0 items-center gap-1.5">
-                {loading ? (
-                  <span className="inline-flex items-center gap-1.5 text-[10px] text-slate-400"><Loader2 size={12} className="animate-spin" /> loading…</span>
-                ) : (
-                  <span className="hidden max-w-[210px] truncate text-[10px] text-slate-500 lg:inline">{source}</span>
-                )}
-                <button type="button" onClick={takeScreenshot} className="bt-tool" title="Save chart image"><Camera size={13} /></button>
-                <button type="button" onClick={() => jumpTo(1)} className="bt-tool" title="Jump to the latest candle"><Download size={13} className="rotate-180" /> <span className="hidden sm:inline">Latest</span></button>
-                <button type="button" onClick={() => setZen((value) => !value)} className="bt-tool" title={zen ? 'Exit fullscreen (Esc)' : 'Fullscreen (F)'}>
-                  {zen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                <button type="button" onClick={takeScreenshot} className="bt-icon-btn" title="Save chart image"><Camera size={15} /></button>
+                <button type="button" onClick={() => setZen((value) => !value)} className="bt-icon-btn" title={zen ? 'Exit fullscreen (Esc)' : 'Fullscreen (F)'}>
+                  {zen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
                 </button>
               </div>
             </div>
@@ -933,19 +977,19 @@ export const BacktestView: React.FC = () => {
               <nav className="bt-rail" aria-label="Drawing tools">
                 {DRAW_TOOLS.map((item) => (
                   <button key={item.id} type="button" onClick={() => setTool(item.id)} title={item.hint} className={`bt-rail-btn ${tool === item.id ? 'is-active' : ''}`}>
-                    <item.icon size={15} />
+                    <item.icon size={17} />
                   </button>
                 ))}
                 <div className="bt-rail-sep" />
                 <button type="button" onClick={() => setMagnet((value) => !value)} title="Magnet snapping to OHLC" className={`bt-rail-btn ${magnet ? 'is-active' : ''}`}>
-                  <Magnet size={15} />
+                  <Magnet size={17} />
                 </button>
-                <button type="button" onClick={() => setDrawings([])} title="Remove all drawings" disabled={!drawings.length} className="bt-rail-btn disabled:opacity-30">
-                  <Trash2 size={15} />
+                <button type="button" onClick={clearDrawings} title="Remove all drawings" disabled={!drawings.length} className="bt-rail-btn disabled:opacity-30">
+                  <Trash2 size={17} />
                 </button>
               </nav>
 
-              <div className="bt-chart-area relative h-[380px] min-w-0 flex-1 sm:h-[500px]">
+              <div className="bt-chart-area relative h-[420px] min-w-0 flex-1 sm:h-[560px]">
                 <BacktestChart
                   candles={candles}
                   cursor={cursor}
@@ -962,40 +1006,49 @@ export const BacktestView: React.FC = () => {
                   magnet={magnet}
                   screenshotSignal={screenshot.signal}
                   screenshotName={screenshot.name}
-                  onAddDrawing={(drawing) => setDrawings((current) => [...current, drawing])}
-                  onDeleteDrawing={(id) => setDrawings((current) => current.filter((item) => item.id !== id))}
+                  onAddDrawing={addDrawing}
+                  onDeleteDrawing={deleteDrawing}
                 />
 
-                <div className="pointer-events-none absolute left-2.5 top-2 z-10 max-w-[calc(100%-20px)] space-y-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold">
-                    <span className="text-white">{shortName(market.label)}/{quoteName(market.label)}</span>
-                    <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-slate-300">{timeframe.toUpperCase()}</span>
-                    {candle && (
-                      <span className="bt-mono flex flex-wrap gap-x-1.5 text-[10px] font-normal text-slate-400">
-                        <span>O <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.open, digits)}</span></span>
-                        <span>H <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.high, digits)}</span></span>
-                        <span>L <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.low, digits)}</span></span>
-                        <span>C <span className={directionTone === 'up' ? 'text-emerald-400' : 'text-rose-400'}>{fmtPrice(candle.close, digits)}</span></span>
-                        {candle.volume > 0 && <span className="text-slate-500">V {fmtCompact(candle.volume)}</span>}
-                      </span>
-                    )}
+                {/* TradingView watermark */}
+                <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center overflow-hidden">
+                  <span className="select-none whitespace-nowrap text-[38px] font-semibold tracking-tight text-white/[0.04] sm:text-[64px]">
+                    {shortName(market.label)}/{quoteName(market.label)} <span className="text-[0.55em]">{timeframe.toUpperCase()}</span>
+                  </span>
+                </div>
+
+                {/* TradingView OHLC legend */}
+                <div className="pointer-events-none absolute left-3 top-2 z-10 max-w-[calc(100%-24px)]">
+                  <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] leading-tight">
+                    <span className="font-semibold text-[#d1d4dc]">{shortName(market.label)}/{quoteName(market.label)}</span>
+                    <span className="text-[#787b86]">·</span>
+                    <span className="font-medium text-[#d1d4dc]">{timeframe.toUpperCase()}</span>
+                    <span className="text-[#787b86]">·</span>
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-[#787b86]">{market.kind === 'crypto' ? 'BINANCE' : 'PRACTICE'}</span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[9.5px] text-slate-500">
-                    {overlays.ema1 && <span><span className="text-sky-400">EMA {periods.ema1}</span> {fmtPrice(legend.ema1 ?? undefined, digits)}</span>}
-                    {overlays.ema2 && <span><span className="text-amber-400">EMA {periods.ema2}</span> {fmtPrice(legend.ema2 ?? undefined, digits)}</span>}
-                    {overlays.ema3 && <span><span className="text-violet-400">EMA {periods.ema3}</span> {fmtPrice(legend.ema3 ?? undefined, digits)}</span>}
-                    {overlays.ema4 && <span><span className="text-pink-400">EMA {periods.ema4}</span> {fmtPrice(legend.ema4 ?? undefined, digits)}</span>}
-                    {overlays.vwap && <span><span className="text-cyan-400">VWAP</span> {fmtPrice(legend.vwap ?? undefined, digits)}</span>}
-                    {overlays.rsi && <span><span className="text-fuchsia-400">RSI {periods.rsiLength}</span> {legend.rsi === null ? '—' : legend.rsi.toFixed(1)}</span>}
-                    {overlays.macd && <span><span className="text-sky-400">MACD</span> {legend.macd === null ? '—' : legend.macd.toFixed(2)}</span>}
-                    {overlays.stoch && <span><span className="text-amber-400">Stoch RSI</span> {legend.stoch === null ? '—' : legend.stoch.toFixed(1)}</span>}
-                    <span><span className="text-slate-400">ATR {periods.atrLength}</span> {legend.atr === null ? '—' : fmtPrice(legend.atr, digits)}</span>
+                  {candle && (
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[10px] tabular-nums" style={{ color: directionTone === 'up' ? '#26a69a' : '#ef5350' }}>
+                      <span>O {fmtPrice(candle.open, digits)}</span>
+                      <span>H {fmtPrice(candle.high, digits)}</span>
+                      <span>L {fmtPrice(candle.low, digits)}</span>
+                      <span>C {fmtPrice(candle.close, digits)}</span>
+                      <span className="text-[#787b86]">{fmtSigned(candle.close - candle.open, digits)} ({pct(((candle.close - candle.open) / Math.max(1e-9, candle.open)) * 100)})</span>
+                      {candle.volume > 0 && <span className="text-[#787b86]">Vol {fmtCompact(candle.volume)}</span>}
+                    </div>
+                  )}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] leading-tight text-[#b2b5be]">
+                    {overlays.ema1 && <span><span className="text-[#2962ff]">EMA {periods.ema1}</span> <span className="tabular-nums">{fmtPrice(legend.ema1 ?? undefined, digits)}</span></span>}
+                    {overlays.ema2 && <span><span className="text-[#ff9800]">EMA {periods.ema2}</span> <span className="tabular-nums">{fmtPrice(legend.ema2 ?? undefined, digits)}</span></span>}
+                    {overlays.ema3 && <span><span className="text-[#e91e63]">EMA {periods.ema3}</span> <span className="tabular-nums">{fmtPrice(legend.ema3 ?? undefined, digits)}</span></span>}
+                    {overlays.ema4 && <span><span className="text-[#9c27b0]">EMA {periods.ema4}</span> <span className="tabular-nums">{fmtPrice(legend.ema4 ?? undefined, digits)}</span></span>}
+                    {overlays.vwap && <span><span className="text-[#00bcd4]">VWAP</span> <span className="tabular-nums">{fmtPrice(legend.vwap ?? undefined, digits)}</span></span>}
+                    <span><span className="text-[#787b86]">ATR {periods.atrLength}</span> <span className="tabular-nums">{legend.atr === null ? '—' : fmtPrice(legend.atr, digits)}</span></span>
                   </div>
                 </div>
 
                 {loading && (
-                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0c111a]/70 backdrop-blur-[2px]">
-                    <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs text-slate-200">
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#131722]/70 backdrop-blur-[2px]">
+                    <div className="flex items-center gap-2 rounded border border-[#2a2e39] bg-[#1e222d] px-3 py-1.5 text-xs text-[#d1d4dc]">
                       <Loader2 size={14} className="animate-spin" /> Fetching candles…
                     </div>
                   </div>
@@ -1003,37 +1056,37 @@ export const BacktestView: React.FC = () => {
 
                 <div className="absolute bottom-2.5 left-2.5 z-10 flex flex-wrap items-center gap-1.5">
                   {active && candle && (
-                    <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#101722]/90 px-2.5 py-1.5 text-[10px] backdrop-blur">
-                      <span className={active.side === 'long' ? 'text-emerald-400' : 'text-rose-400'}>{active.side === 'long' ? 'LONG' : 'SHORT'} · {fmtPrice(active.entry, digits)}</span>
-                      <span className="text-slate-600">•</span>
-                      <span className={openPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>uPnL {fmtSignedMoney(openPnl)}</span>
-                      <span className="text-slate-600">•</span>
-                      <span className="text-slate-400">{active.risk > 0 ? `${fmtSigned(openPnl / active.risk, 2)}R` : '—'}</span>
+                    <div className="flex items-center gap-2 rounded border border-[#2a2e39] bg-[#1e222d]/95 px-2.5 py-1.5 text-[10px] text-[#b2b5be] backdrop-blur">
+                      <span className={active.side === 'long' ? 'text-[#26a69a]' : 'text-[#ef5350]'}>{active.side === 'long' ? 'LONG' : 'SHORT'} · {fmtPrice(active.entry, digits)}</span>
+                      <span className="text-[#4a4e59]">•</span>
+                      <span className={openPnl >= 0 ? 'text-[#26a69a]' : 'text-[#ef5350]'}>uPnL {fmtSignedMoney(openPnl)}</span>
+                      <span className="text-[#4a4e59]">•</span>
+                      <span>{active.risk > 0 ? `${fmtSigned(openPnl / active.risk, 2)}R` : '—'}</span>
                     </div>
                   )}
                   {orders.map((order) => (
-                    <div key={order.id} className="flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-1.5 text-[10px] text-amber-200 backdrop-blur">
+                    <div key={order.id} className="flex items-center gap-1.5 rounded border border-[#2962ff]/40 bg-[#2962ff]/10 px-2.5 py-1.5 text-[10px] text-[#8ab4ff] backdrop-blur">
                       <span>{order.side === 'long' ? 'BUY' : 'SELL'} LIMIT @ {fmtPrice(order.price, digits)}</span>
-                      <button type="button" onClick={() => cancelOrder(order.id)} className="text-amber-300/70 hover:text-white" title="Cancel order"><X size={11} /></button>
+                      <button type="button" onClick={() => cancelOrder(order.id)} className="text-[#8ab4ff]/70 hover:text-white" title="Cancel order"><X size={11} /></button>
                     </div>
                   ))}
                 </div>
 
                 {tool !== 'cursor' && tool !== 'crosshair' && (
-                  <button type="button" onClick={() => setTool('cursor')} className="absolute right-2.5 top-2 z-20 rounded-lg border border-white/10 bg-[#101722]/90 px-2 py-1 text-[10px] text-slate-300 backdrop-blur hover:text-white">
-                    <X size={11} className="mr-1 inline" /> exit drawing
+                  <button type="button" onClick={() => setTool('cursor')} className="bt-icon-btn absolute right-2.5 top-2 z-20 border border-[#2a2e39] bg-[#1e222d]">
+                    <X size={11} /> <span className="text-[10px]">exit drawing</span>
                   </button>
                 )}
               </div>
             </div>
 
             {/* replay bar */}
-            <div className="border-t border-white/[0.07] px-2.5 pb-2.5 pt-2.5 sm:px-3">
-              <div className="mb-1.5 flex items-center justify-between text-[10px] text-slate-500">
-                <span className="bt-mono">
+            <div className="border-t border-[#2a2e39] bg-[#131722] px-2.5 pb-2 pt-2 sm:px-3">
+              <div className="mb-1.5 flex items-center justify-between text-[10px] tabular-nums text-[#787b86]">
+                <span>
                   {candle ? new Date(Number(candle.time) * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                 </span>
-                <span>{cursor + 1} / {candles.length} candles · {progress.toFixed(0)}%</span>
+                <span>{cursor + 1} / {candles.length} bars · {progress.toFixed(0)}%</span>
               </div>
               <input
                 type="range"
@@ -1049,22 +1102,22 @@ export const BacktestView: React.FC = () => {
                 style={{ '--progress': `${progress}%` } as React.CSSProperties}
               />
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-0.5">
                   <button type="button" onClick={() => jumpTo(0)} title="Start of data" className="bt-control"><SkipBack size={15} /></button>
                   <button type="button" onClick={() => advanceTo(cursorRef.current - 1)} title="Previous candle (←)" className="bt-control"><ChevronLeft size={17} /></button>
-                  <button type="button" onClick={togglePlay} title="Play / pause (Space)" className="flex h-9 w-11 items-center justify-center rounded-xl bg-white text-zinc-900 hover:bg-emerald-300">
-                    {playing ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
+                  <button type="button" onClick={togglePlay} title="Play / pause (Space)" className="mx-1 flex h-7 w-9 items-center justify-center rounded bg-[#2962ff] text-white hover:bg-[#1e53e5]">
+                    {playing ? <Pause size={15} /> : <Play size={15} fill="currentColor" />}
                   </button>
                   <button type="button" onClick={() => advanceTo(cursorRef.current + 1)} title="Next candle (→)" className="bt-control"><ChevronRight size={17} /></button>
                   <button type="button" onClick={() => advanceTo(cursorRef.current + 10)} title="Skip 10 candles (Shift+→)" className="bt-control"><SkipForward size={15} /></button>
                   <button type="button" onClick={() => jumpTo(1)} title="End of data" className="bt-control"><ChevronRight size={15} /><ChevronRight size={15} className="-ml-2" /></button>
-                  <span className="ml-1.5 hidden items-center gap-1 text-[10px] text-slate-500 2xl:flex">
+                  <span className="ml-1.5 hidden items-center gap-1 text-[10px] text-[#787b86] 2xl:flex">
                     <kbd>←</kbd><kbd>→</kbd> step <kbd>Space</kbd> play <kbd>L</kbd>/<kbd>S</kbd> trade <kbd>C</kbd> close <kbd>B</kbd> BE
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-500">Speed</span>
-                  <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))} aria-label="Playback speed" className="bt-dark-field !w-auto !py-1.5 !text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-[#787b86]">Speed</span>
+                  <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))} aria-label="Playback speed" className="bt-dark-field !w-auto !py-1 !text-[11px]">
                     {[0.5, 1, 2, 4, 8, 16].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
                   </select>
                 </div>
@@ -1072,8 +1125,8 @@ export const BacktestView: React.FC = () => {
             </div>
 
             {/* dock */}
-            <div className="bt-dock border-t border-white/[0.07]">
-              <div className="flex items-center gap-1 overflow-x-auto px-2 pt-1.5">
+            <div className="bt-dock border-t border-[#2a2e39] bg-[#131722]">
+              <div className="flex items-center gap-0 overflow-x-auto px-2 pt-1.5">
                 {([
                   ['executions', `Executions · ${trades.length}`],
                   ['statistics', 'Strategy stats'],
@@ -1081,20 +1134,20 @@ export const BacktestView: React.FC = () => {
                 ] as [DockTab, string][]).map(([id, label]) => (
                   <button key={id} type="button" onClick={() => setDock(id)} className={`bt-dock-tab ${dock === id ? 'is-active' : ''}`}>{label}</button>
                 ))}
-                <span className="ml-auto hidden items-center gap-1 pr-1 text-[9px] text-slate-600 sm:flex">
-                  <Circle /> replay dock
+                <span className="ml-auto hidden items-center gap-1 pr-1 text-[9px] text-[#787b86] sm:flex">
+                  <span className="h-1 w-1 rounded-full bg-[#2962ff]" /> replay dock
                 </span>
               </div>
               <div className="bt-dock-body px-2.5 py-2.5 sm:px-3">
                 {dock === 'executions' && (
                   trades.length === 0 ? (
-                    <div className="flex items-center gap-2 rounded-xl border border-dashed border-white/10 px-3 py-6 text-[11px] text-slate-500">
+                    <div className="flex items-center gap-2 rounded border border-dashed border-[#363a45] px-3 py-6 text-[11px] text-[#787b86]">
                       <Crosshair size={14} /> No executions yet — press <kbd>L</kbd> or <kbd>S</kbd> (or use the ticket) to take a trade at the current candle.
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[720px] text-left text-[11px]">
-                        <thead className="text-[9px] uppercase tracking-wide text-slate-500">
+                        <thead className="text-[9px] uppercase tracking-wide text-[#787b86]">
                           <tr>
                             <th className="px-2 py-1 font-medium">#</th>
                             <th className="px-2 py-1 font-medium">Side</th>
@@ -1112,22 +1165,22 @@ export const BacktestView: React.FC = () => {
                           {[...trades].sort((a, b) => a.entryTime - b.entryTime).map((trade, index) => {
                             const open = trade.exit === undefined;
                             return (
-                              <tr key={trade.id} className="border-t border-white/[0.05] text-slate-400 hover:bg-white/[0.03]">
-                                <td className="px-2 py-1.5 text-slate-600">{index + 1}</td>
+                              <tr key={trade.id} className="border-t border-[#2a2e39] text-[#b2b5be] hover:bg-[#1e222d]">
+                                <td className="px-2 py-1.5 text-[#787b86]">{index + 1}</td>
                                 <td className="px-2 py-1.5">
-                                  <span className={`inline-flex items-center gap-1 font-semibold ${trade.side === 'long' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  <span className={`inline-flex items-center gap-1 font-semibold ${trade.side === 'long' ? 'text-[#26a69a]' : 'text-[#ef5350]'}`}>
                                     {trade.side === 'long' ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
                                     {trade.side === 'long' ? 'Long' : 'Short'}
                                   </span>
                                 </td>
-                                <td className="px-2 py-1.5 text-[9px] uppercase tracking-wide text-slate-500">{trade.orderType ?? 'market'}</td>
-                                <td className="px-2 py-1.5 text-slate-300">{fmtPrice(trade.entry, digits)}</td>
-                                <td className="px-2 py-1.5">{open ? <span className="text-amber-400">open</span> : fmtPrice(trade.exit, digits)}</td>
-                                <td className="px-2 py-1.5 text-slate-500">{fmtQty(trade.qty)}</td>
-                                <td className={`px-2 py-1.5 font-semibold ${open ? 'text-slate-600' : (trade.rMultiple ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{open ? '—' : `${fmtSigned(trade.rMultiple, 2)}R`}</td>
-                                <td className={`px-2 py-1.5 font-semibold ${open ? 'text-slate-600' : (trade.pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{open ? '—' : fmtSignedMoney(trade.pnl)}</td>
-                                <td className="px-2 py-1.5 text-slate-500">{trade.entryIndex !== undefined && trade.exitIndex !== undefined ? trade.exitIndex - trade.entryIndex : '—'}</td>
-                                <td className="px-2 py-1.5 text-[9px] uppercase tracking-wide text-slate-500">{open ? 'in progress' : trade.exitReason ?? 'manual'}</td>
+                                <td className="px-2 py-1.5 text-[9px] uppercase tracking-wide text-[#787b86]">{trade.orderType ?? 'market'}</td>
+                                <td className="px-2 py-1.5 text-[#d1d4dc]">{fmtPrice(trade.entry, digits)}</td>
+                                <td className="px-2 py-1.5">{open ? <span className="text-[#ff9800]">open</span> : fmtPrice(trade.exit, digits)}</td>
+                                <td className="px-2 py-1.5 text-[#787b86]">{fmtQty(trade.qty)}</td>
+                                <td className={`px-2 py-1.5 font-semibold ${open ? 'text-[#787b86]' : (trade.rMultiple ?? 0) >= 0 ? 'text-[#26a69a]' : 'text-[#ef5350]'}`}>{open ? '—' : `${fmtSigned(trade.rMultiple, 2)}R`}</td>
+                                <td className={`px-2 py-1.5 font-semibold ${open ? 'text-[#787b86]' : (trade.pnl ?? 0) >= 0 ? 'text-[#26a69a]' : 'text-[#ef5350]'}`}>{open ? '—' : fmtSignedMoney(trade.pnl)}</td>
+                                <td className="px-2 py-1.5 text-[#787b86]">{trade.entryIndex !== undefined && trade.exitIndex !== undefined ? trade.exitIndex - trade.entryIndex : '—'}</td>
+                                <td className="px-2 py-1.5 text-[9px] uppercase tracking-wide text-[#787b86]">{open ? 'in progress' : trade.exitReason ?? 'manual'}</td>
                               </tr>
                             );
                           })}
@@ -1141,16 +1194,16 @@ export const BacktestView: React.FC = () => {
                   <div className="space-y-2.5">
                     <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
                       {metricTiles.map(([label, value, tone]) => (
-                        <div key={label} className="rounded-lg bg-white/[0.04] px-2.5 py-1.5">
-                          <div className="text-[9px] uppercase tracking-wide text-slate-500">{label}</div>
-                          <div className={`mt-0.5 text-[12px] font-semibold tabular-nums ${tone === 'up' ? 'text-emerald-400' : tone === 'down' ? 'text-rose-400' : 'text-slate-200'}`}>{value}</div>
+                        <div key={label} className="rounded-sm bg-[#1e222d] px-2.5 py-1.5">
+                          <div className="text-[9px] uppercase tracking-wide text-[#787b86]">{label}</div>
+                          <div className={`mt-0.5 text-[12px] font-semibold tabular-nums ${tone === 'up' ? 'text-[#26a69a]' : tone === 'down' ? 'text-[#ef5350]' : 'text-[#d1d4dc]'}`}>{value}</div>
                         </div>
                       ))}
                     </div>
-                    <div className="rounded-lg bg-white/[0.03] px-2 pb-1 pt-2">
-                      <div className="mb-1 flex items-center justify-between text-[9px] uppercase tracking-wide text-slate-500">
+                    <div className="rounded-sm bg-[#1e222d] px-2 pb-1 pt-2">
+                      <div className="mb-1 flex items-center justify-between text-[9px] uppercase tracking-wide text-[#787b86]">
                         <span>Equity curve</span>
-                        <span className="tabular-nums text-slate-400">{fmtMoney(equity, 0)}</span>
+                        <span className="tabular-nums text-[#b2b5be]">{fmtMoney(equity, 0)}</span>
                       </div>
                       <EquityCurve points={stats.equity} start={balance} />
                     </div>
@@ -1160,27 +1213,27 @@ export const BacktestView: React.FC = () => {
                 {dock === 'distribution' && (
                   <div className="space-y-1.5">
                     {stats.count === 0 ? (
-                      <div className="rounded-xl border border-dashed border-white/10 px-3 py-6 text-center text-[11px] text-slate-500">Close a few trades to see how your R multiples are distributed.</div>
+                      <div className="rounded border border-dashed border-[#363a45] px-3 py-6 text-center text-[11px] text-[#787b86]">Close a few trades to see how your R multiples are distributed.</div>
                     ) : (
                       rBuckets.map((bucket) => (
                         <div key={bucket.label} className="flex items-center gap-2 text-[10px]">
-                          <span className="w-[74px] shrink-0 text-right text-slate-500">{bucket.label}</span>
-                          <div className="h-3 flex-1 overflow-hidden rounded-full bg-white/[0.05]">
+                          <span className="w-[74px] shrink-0 text-right text-[#787b86]">{bucket.label}</span>
+                          <div className="h-3 flex-1 overflow-hidden rounded-sm bg-[#2a2e39]">
                             <div
-                              className={`h-full rounded-full ${bucket.label.startsWith('-') || bucket.label.startsWith('≤') ? 'bg-rose-500/70' : 'bg-emerald-500/70'}`}
+                              className={`h-full rounded-sm ${bucket.label.startsWith('-') || bucket.label.startsWith('≤') ? 'bg-[#ef5350]/80' : 'bg-[#26a69a]/80'}`}
                               style={{ width: `${(bucket.count / rMax) * 100}%` }}
                             />
                           </div>
-                          <span className="w-6 text-right tabular-nums text-slate-400">{bucket.count}</span>
+                          <span className="w-6 text-right tabular-nums text-[#b2b5be]">{bucket.count}</span>
                         </div>
                       ))
                     )}
                     {stats.count > 0 && (
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-[10px] text-slate-500">
-                        <span>Best <span className="text-emerald-400">{fmtSigned(Math.max(...stats.rValues), 2)}R</span></span>
-                        <span>Worst <span className="text-rose-400">{fmtSigned(Math.min(...stats.rValues), 2)}R</span></span>
-                        <span>Avg <span className="text-slate-300">{fmtSigned(stats.avgR, 2)}R</span></span>
-                        <span>Sample <span className="text-slate-300">{stats.count}</span></span>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-[10px] text-[#787b86]">
+                        <span>Best <span className="text-[#26a69a]">{fmtSigned(Math.max(...stats.rValues), 2)}R</span></span>
+                        <span>Worst <span className="text-[#ef5350]">{fmtSigned(Math.min(...stats.rValues), 2)}R</span></span>
+                        <span>Avg <span className="text-[#d1d4dc]">{fmtSigned(stats.avgR, 2)}R</span></span>
+                        <span>Sample <span className="text-[#d1d4dc]">{stats.count}</span></span>
                       </div>
                     )}
                   </div>
@@ -1247,26 +1300,26 @@ export const BacktestView: React.FC = () => {
               </label>
             )}
 
-            <div className="mt-3 rounded-2xl bg-[#0c111a] p-3 text-[10px] text-slate-400">
+            <div className="mt-3 rounded-2xl bg-[#f7f8fa] p-3 text-[10px] text-slate-500">
               <div className="flex items-center justify-between">
                 <span>{orderKind === 'limit' ? 'Limit entry' : 'Entry · current close'}</span>
-                <span className="bt-mono text-sm font-semibold text-white">{candle ? fmtPrice(entryRef, digits) : '—'}</span>
+                <span className="bt-mono text-sm font-semibold text-zinc-900">{candle ? fmtPrice(entryRef, digits) : '—'}</span>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <div className="rounded-xl bg-white/[0.04] px-2.5 py-2">
-                  <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-400"><ArrowUp size={9} /> Long</div>
-                  <div className="mt-1 flex items-center justify-between"><span>Stop</span><span className="bt-mono text-rose-300">{fmtPrice(longStop, digits)}</span></div>
-                  <div className="flex items-center justify-between"><span>Target</span><span className="bt-mono text-emerald-300">{fmtPrice(longTarget, digits)}</span></div>
+                <div className="rounded-xl bg-white px-2.5 py-2 shadow-[0_1px_2px_rgba(15,23,42,.05)]">
+                  <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-600"><ArrowUp size={9} /> Long</div>
+                  <div className="mt-1 flex items-center justify-between"><span>Stop</span><span className="bt-mono text-rose-600">{fmtPrice(longStop, digits)}</span></div>
+                  <div className="flex items-center justify-between"><span>Target</span><span className="bt-mono text-emerald-600">{fmtPrice(longTarget, digits)}</span></div>
                 </div>
-                <div className="rounded-xl bg-white/[0.04] px-2.5 py-2">
-                  <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-rose-400"><ArrowDown size={9} /> Short</div>
-                  <div className="mt-1 flex items-center justify-between"><span>Stop</span><span className="bt-mono text-rose-300">{fmtPrice(shortStop, digits)}</span></div>
-                  <div className="flex items-center justify-between"><span>Target</span><span className="bt-mono text-emerald-300">{fmtPrice(shortTarget, digits)}</span></div>
+                <div className="rounded-xl bg-white px-2.5 py-2 shadow-[0_1px_2px_rgba(15,23,42,.05)]">
+                  <div className="flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-rose-600"><ArrowDown size={9} /> Short</div>
+                  <div className="mt-1 flex items-center justify-between"><span>Stop</span><span className="bt-mono text-rose-600">{fmtPrice(shortStop, digits)}</span></div>
+                  <div className="flex items-center justify-between"><span>Target</span><span className="bt-mono text-emerald-600">{fmtPrice(shortTarget, digits)}</span></div>
                 </div>
               </div>
-              <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
+              <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
                 <span>Size · risk · R:R</span>
-                <span className="bt-mono text-slate-200">{fmtQty(qty)} · <span className="text-amber-300">{fmtMoney(riskAmount, 0)}</span> · 1:{rewardR.toFixed(1)}</span>
+                <span className="bt-mono text-zinc-800">{fmtQty(qty)} · <span className="text-amber-600">{fmtMoney(riskAmount, 0)}</span> · 1:{rewardR.toFixed(1)}</span>
               </div>
               <div className="mt-1 text-[9px] text-slate-500">
                 {candle && stopDistance ? `Stop ${((stopDistance / candle.close) * 100).toFixed(2)}% away · ATR ${fmtPrice(atr ?? undefined, digits)}` : 'Waiting for enough candles to compute ATR.'}

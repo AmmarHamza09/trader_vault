@@ -247,37 +247,41 @@ main table th:last-child { border-top-right-radius: 1rem; }
 }
 .coach-input { background: transparent !important; box-shadow: none !important; padding: 0.5rem 0 !important; border-radius: 0 !important; }
 
-/* Backtest replay controls */
-.bt-control { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 0.75rem; color: #94a3b8; background: rgba(255,255,255,0.06); }
-.bt-control:hover { color: white; background: rgba(255,255,255,0.12); }
-.bt-range { appearance: none; height: 4px; border-radius: 9999px; background: linear-gradient(to right, #34d399 var(--progress), rgba(255,255,255,.12) var(--progress)); outline: none; cursor: pointer; }
-.bt-range::-webkit-slider-thumb { appearance: none; width: 13px; height: 13px; border-radius: 50%; background: #fff; border: 3px solid #34d399; box-shadow: 0 0 0 4px rgba(52,211,153,.15); }
-.bt-range::-moz-range-thumb { width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 3px solid #34d399; box-shadow: 0 0 0 4px rgba(52,211,153,.15); }
-.bt-page kbd { border-radius: 4px; border: 1px solid rgba(148,163,184,.25); padding: 1px 4px; color: #94a3b8; font-size: 9px; }
+/* Backtest replay controls (TradingView dark) */
+.bt-control { display: inline-flex; width: 30px; height: 30px; align-items: center; justify-content: center; border-radius: .3rem; color: #b2b5be; background: transparent; }
+.bt-control:hover { color: #d1d4dc; background: #2a2e39; }
+.bt-control:disabled { opacity: .35; cursor: not-allowed; }
+.bt-range { appearance: none; -webkit-appearance: none; height: 3px; border-radius: 9999px; background: linear-gradient(to right, #2962ff var(--progress), #363a45 var(--progress)); outline: none; cursor: pointer; }
+.bt-range::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: #2962ff; border: 2px solid #131722; box-shadow: 0 0 0 1px #2962ff; }
+.bt-range::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: #2962ff; border: 2px solid #131722; box-shadow: 0 0 0 1px #2962ff; }
+.bt-page kbd { border-radius: 3px; border: 1px solid #363a45; padding: 1px 4px; color: #b2b5be; background: #1e222d; font-size: 9px; }
 
 /* ===== Backtesting terminal (TradingView-style replay) ===== */
 .bt-page .bt-dark-field {
-  background-color: rgba(255,255,255,.06) !important;
-  border: 1px solid rgba(255,255,255,.10) !important;
-  border-radius: .65rem !important;
-  color: #e2e8f0 !important;
+  background-color: #1e222d !important;
+  border: 1px solid #363a45 !important;
+  border-radius: .3rem !important;
+  color: #d1d4dc !important;
   box-shadow: none !important;
-  padding: .4rem .55rem !important;
+  padding: .35rem .5rem !important;
   font-size: 11px !important;
   outline: none;
   color-scheme: dark;
 }
-.bt-page .bt-dark-field:focus { box-shadow: 0 0 0 2px rgba(52,211,153,.35) !important; }
-.bt-page .bt-dark-field option, .bt-page .bt-dark-field optgroup { background: #131a26; color: #e2e8f0; }
+.bt-page .bt-dark-field:focus { border-color: #2962ff !important; box-shadow: 0 0 0 1px rgba(41,98,255,.4) !important; }
+.bt-page .bt-dark-field option, .bt-page .bt-dark-field optgroup { background: #1e222d; color: #d1d4dc; }
 
-.bt-page .bt-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: .7rem; background: rgba(255,255,255,.05); }
-.bt-page .bt-seg-btn { padding: .32rem .52rem; border-radius: .5rem; font-size: 10px; font-weight: 600; color: #94a3b8; line-height: 1; }
-.bt-page .bt-seg-btn:hover { color: #e2e8f0; background: rgba(255,255,255,.07); }
-.bt-page .bt-seg-btn.is-active { background: #fff; color: #0c111a; }
-
-.bt-page .bt-tool { display: inline-flex; align-items: center; gap: .35rem; padding: .42rem .6rem; border-radius: .65rem; font-size: 10px; font-weight: 600; color: #94a3b8; background: rgba(255,255,255,.05); white-space: nowrap; }
-.bt-page .bt-tool:hover { color: #fff; background: rgba(255,255,255,.11); }
-.bt-page .bt-tool.is-active { color: #fff; background: rgba(255,255,255,.15); }
+/* TradingView top bar controls */
+.bt-page .bt-topbar { background: #131722; }
+.bt-page .bt-topbar-sep { width: 1px; height: 20px; margin: 0 .3rem; background: #2a2e39; flex-shrink: 0; }
+.bt-page .bt-intervals { display: inline-flex; align-items: center; gap: 1px; }
+.bt-page .bt-interval { min-width: 27px; padding: .36rem .35rem; border-radius: .3rem; font-size: 11px; font-weight: 500; color: #b2b5be; line-height: 1; }
+.bt-page .bt-interval:hover { background: #2a2e39; color: #d1d4dc; }
+.bt-page .bt-interval.is-active { background: #2962ff; color: #fff; }
+.bt-page .bt-icon-btn { display: inline-flex; height: 28px; min-width: 28px; align-items: center; justify-content: center; gap: .3rem; padding: 0 .4rem; border-radius: .3rem; color: #b2b5be; font-size: 11px; white-space: nowrap; }
+.bt-page .bt-icon-btn:hover { background: #2a2e39; color: #d1d4dc; }
+.bt-page .bt-icon-btn.is-active { background: #1e222d; color: #2962ff; }
+.bt-page .bt-icon-btn:disabled { opacity: .35; cursor: not-allowed; }
 
 .bt-page .bt-long, .bt-page .bt-short {
   display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
@@ -294,58 +298,55 @@ main table th:last-child { border-top-right-radius: 1rem; }
 .bt-page table tbody tr td { white-space: nowrap; }
 
 /* ===== Terminal chrome (toolbar, rail, dock, menus) ===== */
-.bt-page .bt-terminal { display: flex; flex-direction: column; }
+.bt-page .bt-terminal { display: flex; flex-direction: column; background: #131722; color: #d1d4dc; }
 
 .bt-page .bt-symbol {
-  display: inline-flex; align-items: center; gap: .5rem;
-  padding: .35rem .55rem; border-radius: .65rem;
-  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .3rem .5rem; border-radius: .3rem;
 }
-.bt-page .bt-symbol:hover { background: rgba(255,255,255,.11); }
+.bt-page .bt-symbol:hover { background: #2a2e39; }
 
 .bt-page .bt-menu {
   position: absolute; top: calc(100% + .35rem); z-index: 40;
-  min-width: 11rem; padding: .3rem;
-  border-radius: .9rem; border: 1px solid rgba(255,255,255,.1);
-  background: #131a26; box-shadow: 0 18px 44px rgba(2,6,23,.55);
+  min-width: 11rem; padding: .25rem;
+  border-radius: .35rem; border: 1px solid #2a2e39;
+  background: #1e222d; box-shadow: 0 14px 36px rgba(0,0,0,.5);
 }
 .bt-page .bt-menu-item {
   display: flex; align-items: center; gap: .5rem; width: 100%;
-  padding: .42rem .5rem; border-radius: .55rem;
-  font-size: 11px; color: #cbd5e1;
+  padding: .4rem .5rem; border-radius: .25rem;
+  font-size: 11px; color: #b2b5be;
 }
-.bt-page .bt-menu-item:hover { background: rgba(255,255,255,.07); color: #fff; }
-.bt-page .bt-menu-item.is-active { background: rgba(56,189,248,.14); color: #e0f2fe; }
+.bt-page .bt-menu-item:hover { background: #2a2e39; color: #d1d4dc; }
+.bt-page .bt-menu-item.is-active { background: rgba(41,98,255,.2); color: #d1d4dc; }
 
 .bt-page .bt-rail {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  width: 40px; flex-shrink: 0; padding: .45rem 0;
-  background: #0a0f17; border-right: 1px solid rgba(255,255,255,.06);
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  width: 46px; flex-shrink: 0; padding: .4rem 0;
+  background: #131722; border-right: 1px solid #2a2e39;
   overflow-y: auto; scrollbar-width: none;
 }
 .bt-page .bt-rail::-webkit-scrollbar { display: none; }
 .bt-page .bt-rail-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; flex-shrink: 0; border-radius: .5rem;
-  color: #64748b;
+  width: 34px; height: 34px; flex-shrink: 0; border-radius: .3rem;
+  color: #b2b5be;
 }
-.bt-page .bt-rail-btn:hover { color: #e2e8f0; background: rgba(255,255,255,.08); }
-.bt-page .bt-rail-btn.is-active {
-  color: #7dd3fc; background: rgba(56,189,248,.16);
-  box-shadow: inset 0 0 0 1px rgba(56,189,248,.35);
-}
-.bt-page .bt-rail-sep { width: 18px; height: 1px; margin: .35rem 0; background: rgba(255,255,255,.1); }
+.bt-page .bt-rail-btn:hover { color: #d1d4dc; background: #2a2e39; }
+.bt-page .bt-rail-btn.is-active { color: #2962ff; background: #1e222d; }
+.bt-page .bt-rail-sep { width: 22px; height: 1px; margin: .4rem 0; background: #2a2e39; }
 
+.bt-page .bt-dock { background: #131722; }
 .bt-page .bt-dock-tab {
-  padding: .4rem .65rem; border-radius: .5rem .5rem 0 0;
-  font-size: 10px; font-weight: 600; color: #64748b; white-space: nowrap;
+  padding: .45rem .7rem;
+  font-size: 11px; font-weight: 500; color: #787b86; white-space: nowrap;
   border-bottom: 2px solid transparent;
 }
-.bt-page .bt-dock-tab:hover { color: #cbd5e1; }
-.bt-page .bt-dock-tab.is-active { color: #fff; border-bottom-color: #38bdf8; background: rgba(255,255,255,.04); }
+.bt-page .bt-dock-tab:hover { color: #d1d4dc; }
+.bt-page .bt-dock-tab.is-active { color: #d1d4dc; border-bottom-color: #2962ff; background: transparent; }
 .bt-page .bt-dock-body { max-height: 258px; overflow-y: auto; }
 .bt-page .bt-dock-body::-webkit-scrollbar { width: 8px; height: 8px; }
-.bt-page .bt-dock-body::-webkit-scrollbar-thumb { background: rgba(148,163,184,.28); border-radius: 9999px; }
+.bt-page .bt-dock-body::-webkit-scrollbar-thumb { background: #363a45; border-radius: 9999px; }
 .bt-page .bt-dock-body::-webkit-scrollbar-track { background: transparent; }
 
 .bt-page .bt-light-seg { display: flex; gap: 2px; padding: 2px; border-radius: .7rem; background: #f4f4f5; }
@@ -359,7 +360,7 @@ main table th:last-child { border-top-right-radius: 1rem; }
 /* fullscreen terminal */
 .bt-page .bt-zen {
   position: fixed; inset: 0; z-index: 70; width: 100vw; height: 100vh;
-  border-radius: 0; box-shadow: none;
+  border-radius: 0; box-shadow: none; background: #131722;
 }
 .bt-page .bt-zen .bt-chart-area { height: auto !important; min-height: 0; }
 .bt-page .bt-zen .bt-dock-body { max-height: 30vh; }
