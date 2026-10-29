@@ -1,0 +1,25 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+.vercel
+
+# Python virtual environments & caches
+.venv/
+.py312/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local Claude settings (machine-specific)
+.claude/settings.local.json
+
+.vercel
+
+# Local convex dev cache (contains large binaries)
+.cache/
+.temp/

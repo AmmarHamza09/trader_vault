@@ -1,0 +1,10 @@
+{
+  "functions": [
+    "convex/users.ts",
+    "convex/accounts.ts",
+    "convex/trades.ts",
+    "convex/goals.ts",
+    "convex/leaderboard.ts"
+  ],
+  "schema": "convex/schema.ts"
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TraderVault.PRO — Institutional Trading Journal & Analytics</title>
+    <meta name="description" content="TraderVault.PRO — Professional trading journal, quantitative analytics, psychology tracker, and trader performance." />
+    <meta property="og:title" content="TraderVault.PRO — Institutional Trading Journal & Analytics" />
+    <meta property="og:description" content="TraderVault.PRO — Professional trading journal, quantitative analytics, psychology tracker, and trader performance." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#11733f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="TraderVault" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+html,body{margin:0;background:#f4f4f5}
+.tv-splash{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#f4f4f5;font-family:'Urbanist',-apple-system,sans-serif;z-index:9999}
+.tv-splash *{box-sizing:border-box}
+.tv-logo{width:104px;height:69px;animation:tvReveal .75s cubic-bezier(.65,0,.25,1) both,tvBreathe 2.6s 1s ease-in-out infinite}
+.tv-logo img{width:100%;height:100%;object-fit:contain;display:block}
+@keyframes tvReveal{from{clip-path:inset(0 100% 0 0);opacity:.2}to{clip-path:inset(0 0 0 0);opacity:1}}
+@keyframes tvBreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
+@media(prefers-reduced-motion:reduce){.tv-logo{animation:tvFade .5s ease both}}
+@keyframes tvFade{from{opacity:0}}
+</style>
+  </head>
+  <body>
+    <div id="root"><div class="tv-splash" role="status" aria-label="Loading TraderVault">
+  <div class="tv-logo"><img src="/logo.png" alt=""></div>
+</div></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

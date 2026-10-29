@@ -1,0 +1,295 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Urbanist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Urbanist', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+@layer base {
+  * {
+    font-family: 'Urbanist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    font-family: 'Urbanist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #f8fafc;
+    color: #334155;
+  }
+
+  /* Tabular numbers for financial and trading figures */
+  .font-tabular {
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Beautiful Tactile Inset / Inner Shadows */
+.shadow-inner-card {
+  box-shadow: inset 0 1px 3px 0 rgba(0, 0, 0, 0.05), inset 0 0 0 1px rgba(0, 0, 0, 0.03);
+}
+
+.shadow-inner-soft {
+  box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+}
+
+.shadow-inner-medium {
+  box-shadow: inset 0 3px 6px 0 rgba(0, 0, 0, 0.08);
+}
+
+.shadow-inner-well {
+  box-shadow: inset 0 2px 5px 0 rgba(0, 0, 0, 0.07), inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.shadow-inner-emerald {
+  box-shadow: inset 0 2px 5px 0 rgba(16, 185, 129, 0.2);
+}
+
+.shadow-inner-btn {
+  box-shadow: inset 0 1px 2px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 2px 0 rgba(0, 0, 0, 0.15);
+}
+
+.shadow-inner-btn-light {
+  box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+/* Custom sleek scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+/* Shared entrance animation used across modals/panels */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Branded loading screen animations */
+@keyframes loadingRingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loadingPulseGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgba(16, 185, 129, 0);
+  }
+}
+
+@keyframes loadingTicker {
+  0% {
+    stroke-dashoffset: 120;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes loadingDotBounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.loading-ring {
+  animation: loadingRingSpin 1.4s linear infinite;
+}
+
+.loading-pulse {
+  animation: loadingPulseGlow 2s ease-out infinite;
+}
+
+.loading-ticker {
+  stroke-dasharray: 120;
+  animation: loadingTicker 1.6s ease-in-out infinite;
+}
+
+.loading-dot {
+  animation: loadingDotBounce 1.2s ease-in-out infinite;
+}
+
+/* Subtle motion: modals, view changes, press feedback. Kept short + GPU-friendly. */
+@keyframes modalIn { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes viewIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.animate-modalIn { animation: modalIn 0.2s ease-out both; }
+.animate-viewIn { animation: viewIn 0.25s ease-out; }
+button, [role="button"], select { transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease; }
+button:active:not(:disabled) { transform: scale(0.97); }
+@media (hover: hover) { .shadow-inner-card { transition: box-shadow 0.2s ease, border-color 0.2s ease; } }
+@media (prefers-reduced-motion: reduce) { *:not(.lp):not(.lp *):not(.tv-splash):not(.tv-splash *), *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+/* ============ Soft design system (matches reference UI) ============ */
+:root { --soft-shadow: 0 2px 14px rgba(15, 23, 42, 0.05); }
+body, .bg-\[\#f8fafc\] { background-color: #f4f4f5; }
+
+/* Cards */
+main .rounded-2xl { border-radius: 1.75rem; border-color: transparent; box-shadow: var(--soft-shadow); }
+main .rounded-xl.bg-white { border-radius: 1.25rem; border-color: transparent; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04); }
+main h1, main h2 { font-weight: 500; letter-spacing: -0.01em; }
+main h3 { font-weight: 500; }
+
+/* Forms: soft pill/rounded fields, no hard borders */
+:is(main, .fixed.inset-0.z-50) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+:is(main, .fixed.inset-0.z-50) select,
+:is(main, .fixed.inset-0.z-50) textarea {
+  background-color: #fff;
+  border: 0 !important;
+  box-shadow: var(--soft-shadow);
+  border-radius: 1.1rem !important;
+  font-size: 0.875rem;
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
+}
+:is(main, .fixed.inset-0.z-50) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,
+:is(main, .fixed.inset-0.z-50) select:focus, :is(main, .fixed.inset-0.z-50) textarea:focus { outline: none; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.12), var(--soft-shadow); }
+:is(main, .fixed.inset-0.z-50) textarea { border-radius: 1.4rem !important; }
+:is(main, .fixed.inset-0.z-50) label { font-weight: 400; }
+
+/* Buttons: black pill primary (was emerald), soft secondary */
+:is(main, .fixed.inset-0.z-50) button.bg-emerald-600, :is(main, .fixed.inset-0.z-50) button.bg-emerald-500, :is(main, .fixed.inset-0.z-50) button[type="submit"].bg-emerald-600 {
+  background-color: #000 !important; color: #fff !important; border-radius: 9999px; box-shadow: none;
+}
+:is(main, .fixed.inset-0.z-50) button.bg-emerald-600:hover, :is(main, .fixed.inset-0.z-50) button.bg-emerald-500:hover { background-color: #1f1f23 !important; }
+:is(main, .fixed.inset-0.z-50) button.border.border-slate-200.rounded-xl, :is(main, .fixed.inset-0.z-50) button.border.border-slate-200.rounded-lg {
+  border-color: transparent; background-color: #fff; border-radius: 9999px; box-shadow: var(--soft-shadow);
+}
+:is(main, .fixed.inset-0.z-50) .bg-slate-100.rounded-xl, :is(main, .fixed.inset-0.z-50) .bg-slate-100.rounded-lg { border-radius: 9999px; }
+
+/* Modals/popups: bottom sheets on phones, big rounded cards on larger screens */
+.fixed.inset-0.z-50:not(.lg\:hidden) { backdrop-filter: blur(6px); }
+.fixed.inset-0.z-50:not(.lg\:hidden) > div { border-radius: 2rem; border-color: transparent; background-color: #fafafa; }
+@media (max-width: 639px) {
+  .fixed.inset-0.z-50:not(.lg\:hidden) { align-items: flex-end !important; padding: 0 !important; }
+  .fixed.inset-0.z-50:not(.lg\:hidden) > div {
+    width: 100% !important; max-width: 100% !important; border-radius: 2rem 2rem 0 0 !important;
+    max-height: 92vh; animation: sheetUp 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+}
+@keyframes sheetUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Desktop shell: floating soft sidebar + borderless top bar */
+@media (min-width: 1024px) {
+  aside { margin: 14px 0 14px 14px; border-radius: 2rem; border: 0 !important; box-shadow: var(--soft-shadow); height: calc(100vh - 28px); position: sticky; top: 14px; }
+  aside .bg-emerald-50.border-emerald-300 { background-color: #000 !important; border-color: #000 !important; box-shadow: none !important; color: #fff !important; }
+  aside .bg-emerald-50.border-emerald-300 * { color: #fff !important; }
+  aside nav, aside button { border-radius: 9999px; }
+  header.lg\:flex { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+}
+
+/* Pretty scrollbars + tables */
+main table thead tr { background-color: #f4f4f5; }
+main table th:first-child { border-top-left-radius: 1rem; }
+main table th:last-child { border-top-right-radius: 1rem; }
+
+/* One font everywhere: numbers use the same typeface with tabular figures */
+.font-mono, code, kbd { font-family: var(--font-sans) !important; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.tv-mono, .tv-mono * { font-family: ui-monospace, Menlo, Consolas, monospace !important; }
+
+/* ===== Log Trade modal: grey sheet, white section cards, grey fields, black summary ===== */
+.trade-modal { background-color: #f4f4f5 !important; border: 0 !important; }
+.trade-modal .trade-banner .text-slate-500, .trade-modal .trade-banner .text-slate-600 { color: rgba(255,255,255,0.55) !important; }
+.trade-modal .trade-banner .text-slate-800, .trade-modal .trade-banner .text-slate-700 { color: #fff !important; }
+.trade-modal .trade-banner .text-emerald-600 { color: #34d399 !important; }
+.trade-modal .trade-banner .text-rose-600 { color: #fb7185 !important; }
+.trade-modal .trade-banner span.text-base { font-size: 1.6rem; font-weight: 300; line-height: 1.2; }
+.trade-modal .trade-banner span.text-\[11px\] { font-size: 0.8rem; font-weight: 300; }
+.trade-modal form .grid { gap: 1.1rem; }
+.trade-modal form label { font-size: 0.8rem; font-weight: 400; color: #71717a; margin-bottom: 0.4rem; display: block; }
+.trade-modal form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+.trade-modal form select, .trade-modal form textarea {
+  background-color: #f4f4f5 !important; box-shadow: none !important; font-size: 0.95rem;
+  padding: 0.85rem 1.1rem !important; border-radius: 1.25rem !important;
+}
+.trade-modal form input:focus, .trade-modal form select:focus, .trade-modal form textarea:focus { box-shadow: 0 0 0 2px rgba(0,0,0,0.14) !important; background-color: #fff !important; }
+.trade-modal form .rounded-xl.bg-slate-50 { background-color: #f4f4f5; }
+.trade-modal > div:last-child { background: rgba(255,255,255,0.9); backdrop-filter: blur(12px); border: 0 !important; padding-top: 1rem; padding-bottom: 1rem; }
+@media (min-width: 640px) {
+  .trade-modal form .sm\:grid-cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.coach-input { background: transparent !important; box-shadow: none !important; padding: 0.5rem 0 !important; border-radius: 0 !important; }
+
+/* Backtest replay controls */
+.bt-control { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 0.75rem; color: #94a3b8; background: rgba(255,255,255,0.06); }
+.bt-control:hover { color: white; background: rgba(255,255,255,0.12); }
+.bt-range { appearance: none; height: 4px; border-radius: 9999px; background: linear-gradient(to right, #34d399 var(--progress), rgba(255,255,255,.12) var(--progress)); outline: none; cursor: pointer; }
+.bt-range::-webkit-slider-thumb { appearance: none; width: 13px; height: 13px; border-radius: 50%; background: #fff; border: 3px solid #34d399; box-shadow: 0 0 0 4px rgba(52,211,153,.15); }
+.bt-range::-moz-range-thumb { width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 3px solid #34d399; box-shadow: 0 0 0 4px rgba(52,211,153,.15); }
+.bt-page kbd { border-radius: 4px; border: 1px solid rgba(148,163,184,.25); padding: 1px 4px; color: #94a3b8; font-size: 9px; }
+
+/* ===== Backtesting terminal (TradingView-style replay) ===== */
+.bt-page .bt-dark-field {
+  background-color: rgba(255,255,255,.06) !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  border-radius: .65rem !important;
+  color: #e2e8f0 !important;
+  box-shadow: none !important;
+  padding: .4rem .55rem !important;
+  font-size: 11px !important;
+  outline: none;
+  color-scheme: dark;
+}
+.bt-page .bt-dark-field:focus { box-shadow: 0 0 0 2px rgba(52,211,153,.35) !important; }
+.bt-page .bt-dark-field option, .bt-page .bt-dark-field optgroup { background: #131a26; color: #e2e8f0; }
+
+.bt-page .bt-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: .7rem; background: rgba(255,255,255,.05); }
+.bt-page .bt-seg-btn { padding: .32rem .52rem; border-radius: .5rem; font-size: 10px; font-weight: 600; color: #94a3b8; line-height: 1; }
+.bt-page .bt-seg-btn:hover { color: #e2e8f0; background: rgba(255,255,255,.07); }
+.bt-page .bt-seg-btn.is-active { background: #fff; color: #0c111a; }
+
+.bt-page .bt-tool { display: inline-flex; align-items: center; gap: .35rem; padding: .42rem .6rem; border-radius: .65rem; font-size: 10px; font-weight: 600; color: #94a3b8; background: rgba(255,255,255,.05); white-space: nowrap; }
+.bt-page .bt-tool:hover { color: #fff; background: rgba(255,255,255,.11); }
+.bt-page .bt-tool.is-active { color: #fff; background: rgba(255,255,255,.15); }
+
+.bt-page .bt-long, .bt-page .bt-short {
+  display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+  padding: .72rem .75rem; border-radius: 9999px; font-size: 11px; font-weight: 700; color: #fff;
+}
+.bt-page .bt-long { background: linear-gradient(180deg,#10b981,#059669); box-shadow: 0 6px 16px rgba(5,150,105,.25), inset 0 1px 0 rgba(255,255,255,.25); }
+.bt-page .bt-long:hover { background: linear-gradient(180deg,#34d399,#10b981); }
+.bt-page .bt-short { background: linear-gradient(180deg,#f43f5e,#e11d48); box-shadow: 0 6px 16px rgba(225,29,72,.22), inset 0 1px 0 rgba(255,255,255,.22); }
+.bt-page .bt-short:hover { background: linear-gradient(180deg,#fb7185,#f43f5e); }
+.bt-page .bt-long:disabled, .bt-page .bt-short:disabled { opacity: .45; cursor: not-allowed; }
+.bt-page .bt-long:active, .bt-page .bt-short:active { transform: scale(.985); }
+
+/* keep the replay table airy inside the soft cards */
+.bt-page table tbody tr td { white-space: nowrap; }
+
